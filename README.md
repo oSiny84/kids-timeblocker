@@ -121,6 +121,22 @@ PowerShell 명령을 직접 치기 번거로우면 저장소 루트의 .bat 파�
 
 `install.bat` 은 publish 폴더가 없으면 빌드를 먼저 할지 물어봅니다.
 
+### 배포용 패키지 만들기
+
+다른 PC(자녀 PC 등)에 설치할 zip 을 만듭니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1
+```
+
+또는 `make-release.bat` 을 실행하면 됩니다.
+
+`release\TimeBlocker-<버전>.zip` 이 생성됩니다. 안에는 실행파일, 설치 스크립트,
+`.bat` 실행 파일, README, `설치안내.txt` 가 들어 있고 **소스와 빌드 도구는 들어가지 않습니다.**
+
+대상 PC 에는 .NET SDK 가 필요 없고 **.NET 8 Desktop Runtime** 만 있으면 됩니다.
+압축을 푼 뒤 `install.bat` 을 실행하면 설치됩니다.
+
 
 `publish\` 폴더에 `TimeBlocker.Service.exe` 와 `TimeBlocker.Admin.exe` 가 생성됩니다.
 
