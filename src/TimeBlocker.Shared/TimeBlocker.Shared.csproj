@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>TimeBlocker.Shared</RootNamespace>
+    <AssemblyName>TimeBlocker.Shared</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DPAPI(민감정보 암호화)용. Windows 전용. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+</Project>

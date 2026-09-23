@@ -1,0 +1,122 @@
+{
+  "ConfigVersion": 1,
+  "Schedule": {
+    "Days": [
+      {
+        "Day": "Sunday",
+        "Enabled": true,
+        "Start": "21:00",
+        "End": "07:00"
+      },
+      {
+        "Day": "Monday",
+        "Enabled": true,
+        "Start": "21:00",
+        "End": "07:00"
+      },
+      {
+        "Day": "Tuesday",
+        "Enabled": true,
+        "Start": "21:00",
+        "End": "07:00"
+      },
+      {
+        "Day": "Wednesday",
+        "Enabled": true,
+        "Start": "21:00",
+        "End": "07:00"
+      },
+      {
+        "Day": "Thursday",
+        "Enabled": true,
+        "Start": "21:00",
+        "End": "07:00"
+      },
+      {
+        "Day": "Friday",
+        "Enabled": true,
+        "Start": "23:00",
+        "End": "08:00"
+      },
+      {
+        "Day": "Saturday",
+        "Enabled": false,
+        "Start": "21:00",
+        "End": "07:00"
+      }
+    ]
+  },
+  "Dns": {
+    "Enabled": true,
+    "Mode": "ProxyWithHostsFallback",
+    "UpstreamServers": [
+      "1.1.1.1",
+      "8.8.8.8"
+    ],
+    "ProxyPort": 53,
+    "AutoConfigureAdapters": true,
+    "UpstreamTimeoutMs": 3000,
+    "FlushCacheOnChange": true,
+    "ConfigureIpv6": true,
+    "SelfTestDomain": "example.com"
+  },
+  "YouTube": {
+    "Enabled": true,
+    "Domains": [
+      "youtube.com",
+      "www.youtube.com",
+      "m.youtube.com",
+      "youtu.be",
+      "googlevideo.com",
+      "ytimg.com",
+      "youtubei.googleapis.com",
+      "yt3.ggpht.com"
+    ],
+    "UseDnsBlocking": true,
+    "UseFirewallBlocking": false,
+    "ProcessNames": [],
+    "ExtraExecutablePaths": []
+  },
+  "Roblox": {
+    "Enabled": true,
+    "Domains": [
+      "roblox.com",
+      "www.roblox.com",
+      "web.roblox.com",
+      "api.roblox.com",
+      "rbxcdn.com",
+      "setup.rbxcdn.com",
+      "assetgame.roblox.com"
+    ],
+    "UseDnsBlocking": true,
+    "UseFirewallBlocking": true,
+    "ProcessNames": [
+      "RobloxPlayerBeta.exe",
+      "RobloxStudioBeta.exe",
+      "RobloxPlayerLauncher.exe"
+    ],
+    "ExtraExecutablePaths": []
+  },
+  "TemporaryPermit": {
+    "MaxMinutes": 120,
+    "MinMinutes": 1
+  },
+  "Telegram": {
+    "Enabled": false,
+    "AllowedUserIds": [],
+    "PollTimeoutSeconds": 30,
+    "RetryDelaySeconds": 15
+  },
+  "Security": {
+    "RequirePasswordForChanges": true
+  },
+  "Logging": {
+    "MinimumLevel": "INFO",
+    "MaxFileSizeMb": 8,
+    "RetainDays": 30
+  },
+  "Enforcement": {
+    "EvaluationIntervalSeconds": 10,
+    "TimeJumpThresholdMinutes": 5
+  }
+}

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="TimeBlocker.Admin" />
+
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <!--
+          CLI 자체는 승격을 요구하지 않고 그대로 실행된다.
+          권한 통제는 두 겹으로 되어 있다.
+            1) 프로그램이 시작할 때 관리자 여부를 확인하고, 아니면 안내 후 종료한다.
+            2) 서비스의 Named Pipe DACL 이 SYSTEM/Administrators 에게만 열려 있다.
+          따라서 일반 사용자 계정에서는 상태 조회조차 할 수 없다.
+          관리자는 "관리자 권한으로 실행"한 터미널에서 이 CLI 를 사용한다.
+        -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 / 11 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+</assembly>

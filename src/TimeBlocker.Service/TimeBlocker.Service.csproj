@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>TimeBlocker.Service</RootNamespace>
+    <AssemblyName>TimeBlocker.Service</AssemblyName>
+    <!-- Windows Service 로 실행되므로 콘솔 창은 필요하지만, sc.exe 로 등록해 사용한다. -->
+    <UserSecretsId>timeblocker-service</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <!-- Named Pipe 에 ACL 을 지정하기 위해 필요 -->
+    <PackageReference Include="System.IO.Pipes.AccessControl" Version="5.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TimeBlocker.Shared\TimeBlocker.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

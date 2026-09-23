@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>TimeBlocker.Admin</RootNamespace>
+    <AssemblyName>TimeBlocker.Admin</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TimeBlocker.Shared\TimeBlocker.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <!-- 솔루션 전체 공통 설정. .NET 8 = 현재 LTS -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Version>1.0.0</Version>
+    <Company>TimeBlocker</Company>
+    <Product>TimeBlocker</Product>
+  </PropertyGroup>
+</Project>
