@@ -104,6 +104,24 @@ dotnet test  tests\TimeBlocker.Tests\TimeBlocker.Tests.csproj
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
+### 더 간단하게: .bat 더블클릭
+
+PowerShell 명령을 직접 치기 번거로우면 저장소 루트의 .bat 파일을 쓰면 됩니다.
+관리자 권한이 필요한 것들은 **실행하면 알아서 권한 상승 창을 띄웁니다.**
+
+| 파일 | 하는 일 | 권한 상승 |
+|---|---|---|
+| `build.bat` | 빌드 + 테스트 + publish | 불필요 |
+| `install.bat` | Bot Token / User ID 를 물어본 뒤 설치, 끝나면 doctor 자동 실행 | 자동 |
+| `doctor.bat` | 상태 종합 점검 | 자동 |
+| `dns-restore.bat` | **인터넷이 안 될 때 응급 복구** | 자동 |
+| `smoke-test.bat` | 통합 스모크 테스트 | 자동 |
+| `configure-telegram.bat` | Telegram 설정 변경 | 자동 |
+| `uninstall.bat` | 제거 + 원상복구 | 자동 |
+
+`install.bat` 은 publish 폴더가 없으면 빌드를 먼저 할지 물어봅니다.
+
+
 `publish\` 폴더에 `TimeBlocker.Service.exe` 와 `TimeBlocker.Admin.exe` 가 생성됩니다.
 
 ---

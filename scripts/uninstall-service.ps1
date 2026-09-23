@@ -29,6 +29,31 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw "관리자 권한이 필요합니다. 관리자 권한 PowerShell 에서 다시 실행하세요."
 }
 
+function Remove-DirectorySafely([string]$Path, [string]$Label) {
+    # 방금 종료한 프로세스가 DLL 핸들을 잠시 더 쥐고 있을 수 있으므로 몇 번 재시도한다.
+    # 권한 때문에 막히는 경우도 있어 소유권과 ACL 을 먼저 정리한다.
+    if (-not (Test-Path $Path)) { return $true }
+
+    icacls $Path /setowner "*S-1-5-32-544" /T /C /Q 2>&1 | Out-Null
+    icacls $Path /reset /T /C /Q 2>&1 | Out-Null
+
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return $true
+        }
+        catch {
+            if ($attempt -eq 5) {
+                Write-Host "  $Label 삭제 실패: $($_.Exception.Message)" -ForegroundColor Red
+                return $false
+            }
+            Write-Host "  $Label 삭제 재시도 $attempt/4 (파일이 아직 사용 중)" -ForegroundColor DarkYellow
+            Start-Sleep -Seconds 2
+        }
+    }
+    return $false
+}
+
 Write-Host "=== TimeBlocker 서비스 제거 ===" -ForegroundColor Cyan
 
 $exePath = Join-Path $InstallDirectory 'TimeBlocker.Service.exe'
@@ -72,19 +97,30 @@ if ($service) {
 }
 
 # 4. 파일 삭제
+#    여기서 실패해도 스크립트를 중단하지 않는다. 시스템 복구는 이미 [2/4] 에서 끝났고,
+#    남은 파일은 나중에 지워도 되기 때문이다. 결과만 정확히 알려준다.
 Write-Host "[4/4] 파일 정리" -ForegroundColor Yellow
+
+$filesRemoved = $true
+
 if (Test-Path $InstallDirectory) {
-    Remove-Item -Recurse -Force $InstallDirectory
-    Write-Host "  설치 폴더 삭제: $InstallDirectory"
+    if (Remove-DirectorySafely $InstallDirectory '설치 폴더') {
+        Write-Host "  설치 폴더 삭제: $InstallDirectory"
+    }
+    else {
+        $filesRemoved = $false
+    }
 }
 
 $dataDirectory = Join-Path $env:ProgramData 'TimeBlocker'
 if ($RemoveData) {
     if (Test-Path $dataDirectory) {
-        # 설치 중 ACL 을 걸어두었으므로 먼저 상속을 복구해야 삭제할 수 있다.
-        icacls $dataDirectory /reset /T /C | Out-Null
-        Remove-Item -Recurse -Force $dataDirectory
-        Write-Host "  데이터 폴더 삭제: $dataDirectory"
+        if (Remove-DirectorySafely $dataDirectory '데이터 폴더') {
+            Write-Host "  데이터 폴더 삭제: $dataDirectory"
+        }
+        else {
+            $filesRemoved = $false
+        }
     }
 }
 else {
@@ -93,14 +129,23 @@ else {
 }
 
 Write-Host ""
+Write-Host "Service removal   : OK" -ForegroundColor Green
+Write-Host ("File cleanup      : " + $(if ($filesRemoved) { 'OK' } else { 'FAILED' })) `
+    -ForegroundColor $(if ($filesRemoved) { 'Green' } else { 'Red' })
+Write-Host ""
+
 if ($restoreFailed) {
-    Write-Host "Service removal   : OK" -ForegroundColor Green
-    Write-Host ""
     Write-Host "제거는 끝났지만 일부 시스템 복구가 실패했습니다." -ForegroundColor Red
     Write-Host "인터넷이 되지 않으면 네트워크 설정에서 DNS 를 '자동으로 DNS 서버 주소 받기'로 바꾸세요." -ForegroundColor Red
     exit 2
 }
 
-Write-Host "Service removal   : OK" -ForegroundColor Green
-Write-Host ""
+if (-not $filesRemoved) {
+    # 시스템 상태(DNS/hosts/방화벽)는 이미 복구됐다. 남은 것은 파일뿐이라 위험하지 않다.
+    Write-Host "시스템은 정상 복구되었습니다. 다만 일부 파일이 삭제되지 않았습니다." -ForegroundColor Yellow
+    Write-Host "잠시 후(또는 재부팅 후) 아래 폴더를 직접 지우면 됩니다:" -ForegroundColor Yellow
+    Write-Host "  $InstallDirectory" -ForegroundColor Yellow
+    exit 3
+}
+
 Write-Host "System restored successfully." -ForegroundColor Green
