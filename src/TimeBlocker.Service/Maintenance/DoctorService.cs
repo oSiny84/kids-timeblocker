@@ -80,6 +80,9 @@ public sealed class DoctorService : IDiagnosticsService
         report.Add(await CheckNormalResolutionAsync(config, ct).ConfigureAwait(false));
         report.Add(await CheckBlockedResolutionAsync(config, ipv4Alive, routedThroughProxy, ct).ConfigureAwait(false));
 
+        // --- 차단 대상 ---
+        report.Add(CheckBlockTargets(config));
+
         // --- hosts / 방화벽 ---
         report.Add(CheckHostsFallback(ipv4Alive, config));
         report.Add(CheckHostsRegionSanity());
@@ -361,6 +364,14 @@ public sealed class DoctorService : IDiagnosticsService
                 "domain add youtube <도메인> 으로 추가하세요.");
         }
 
+        // 대상 자체가 꺼져 있으면 해석되는 것이 당연하다.
+        // 이 경우 "차단 시간대가 아님" 같은 엉뚱한 안내를 하면 원인을 못 찾는다.
+        if (!config.YouTube.Enabled)
+        {
+            return DoctorCheck.Warn(name, $"{domain} - YouTube 차단이 꺼져 있어 확인 불가",
+                "텔레그램에서 실행: enable youtube");
+        }
+
         // 시스템 해석이 우리 경로를 거치지 않는 상태라면, 시스템 확인자로 물어봐야 의미가 없다.
         // 이 경우 프록시에 직접 물어서 "프록시 자체는 제대로 막고 있는가"를 확인한다.
         if (!routedThroughProxy)
@@ -395,6 +406,44 @@ public sealed class DoctorService : IDiagnosticsService
         {
             return DoctorCheck.Pass(name, $"{domain} blocked");
         }
+    }
+
+    /// <summary>
+    /// 차단 대상이 켜져 있는지 확인한다.
+    ///
+    /// 이 항목이 꺼져 있으면 스케줄이 맞아도 아무것도 차단되지 않는다.
+    /// 실제로 "설치했는데 유튜브가 그대로 열린다" 의 원인이 대부분 여기다.
+    /// </summary>
+    private static DoctorCheck CheckBlockTargets(TimeBlockerConfig config)
+    {
+        const string name = "Block targets";
+
+        var enabled = BlockTargets.Real
+            .Where(t => config.GetTarget(t).Enabled)
+            .Select(t => t.ToDisplayName())
+            .ToList();
+
+        var disabled = BlockTargets.Real
+            .Where(t => !config.GetTarget(t).Enabled)
+            .Select(t => t.ToDisplayName())
+            .ToList();
+
+        if (disabled.Count == 0)
+        {
+            return DoctorCheck.Pass(name, string.Join(", ", enabled.Select(e => $"{e}=ENABLED")));
+        }
+
+        var commands = string.Join(", ", disabled.Select(d => $"enable {d.ToLowerInvariant()}"));
+
+        if (enabled.Count == 0)
+        {
+            return DoctorCheck.Fail(name, "모든 대상이 꺼져 있어 아무것도 차단되지 않습니다",
+                $"텔레그램에서 실행: {commands}");
+        }
+
+        return DoctorCheck.Warn(name,
+            $"{string.Join(", ", disabled)} DISABLED (차단되지 않음)",
+            $"텔레그램에서 실행: {commands}");
     }
 
     // ==================================================== hosts / 방화벽

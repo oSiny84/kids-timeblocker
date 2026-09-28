@@ -244,9 +244,13 @@ try {
         $(if ($blockedOk) { 'blocked' } else { 'RESOLVED (차단 실패)' })
 
     # 6. 하위 도메인 차단 확인 (프록시 방식의 핵심 이점)
-    $subBlockedOk = -not (Test-Resolves $BlockedSubdomain)
+    #    주의: 이 하위 도메인은 실제로 존재하지 않는다.
+    #    "해석 안 됨" 으로 판정하면 차단 여부와 무관하게 항상 통과해 버린다.
+    #    그래서 프록시에 직접 물어 "우리가 만든 차단 응답" 인지 확인한다.
+    $subBlockedOk = Test-BlockedByProxy $BlockedSubdomain
     Add-Result "6. subdomain blocked" $subBlockedOk `
-        $(if ($subBlockedOk) { $BlockedSubdomain } else { 'RESOLVED (하위 도메인 차단 실패)' })
+        $(if ($subBlockedOk) { "$BlockedSubdomain (프록시 확인)" }
+          else { '차단되지 않음 (프록시가 막지 않음)' })
 
     # 7. 유사 도메인은 차단되지 않아야 한다
     #    단순히 "해석 안 됨" 으로 판단하면 원래 없는 도메인과 구분이 안 되므로,
