@@ -64,15 +64,42 @@ else {
 # 2. 파일 복사
 Write-Host "[2/6] 파일 복사 -> $InstallDirectory" -ForegroundColor Yellow
 
-# 이전 설치가 잘못된 권한을 남겼을 수 있으므로 먼저 정상 상태로 되돌린다.
-# (권한이 깨져 있으면 복사나 실행이 "액세스가 거부되었습니다" 로 실패한다)
+# 기존 설치 폴더를 통째로 지우고 새로 넣는다.
+# 덮어쓰기만 하면 구버전에만 있던 파일이 남아, 나중에 엉뚱한 DLL 이 로드될 수 있다.
+#
+# 설정/로그/상태는 %ProgramData%\TimeBlocker 에 있으므로 여기서 지워도 보존된다.
 if (Test-Path $InstallDirectory) {
-    Write-Host "  기존 폴더 권한 초기화" -ForegroundColor DarkGray
-
+    # 이전 설치가 잘못된 권한을 남겼을 수 있으므로 먼저 정상 상태로 되돌린다.
+    # (권한이 깨져 있으면 삭제도 복사도 "액세스가 거부되었습니다" 로 실패한다)
     # takeown 의 /D 옵션은 OS 표시 언어에 따라 답변 글자가 달라지므로 쓰지 않는다.
     # icacls /setowner 는 SID 로 지정하고 프롬프트도 없어서 언어에 영향받지 않는다.
+    Write-Host "  기존 폴더 권한 초기화" -ForegroundColor DarkGray
     icacls $InstallDirectory /setowner "*S-1-5-32-544" /T /C /Q 2>&1 | Out-Null
     icacls $InstallDirectory /reset /T /C /Q 2>&1 | Out-Null
+
+    # 방금 정지한 서비스가 DLL 핸들을 잠시 더 쥐고 있을 수 있어 몇 번 재시도한다.
+    $removed = $false
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $InstallDirectory -Recurse -Force -ErrorAction Stop
+            $removed = $true
+            break
+        }
+        catch {
+            if ($attempt -lt 5) {
+                Write-Host "  기존 파일 삭제 재시도 $attempt/4 (아직 사용 중)" -ForegroundColor DarkYellow
+                Start-Sleep -Seconds 2
+            }
+        }
+    }
+
+    if ($removed) {
+        Write-Host "  기존 설치 제거 완료" -ForegroundColor DarkGray
+    }
+    else {
+        # 지우지 못해도 설치 자체는 진행한다. 덮어쓰기로도 대부분 정상 동작한다.
+        Write-Host "  기존 파일을 지우지 못해 덮어쓰기로 진행합니다." -ForegroundColor DarkYellow
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
