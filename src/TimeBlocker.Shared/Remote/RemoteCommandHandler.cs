@@ -156,8 +156,10 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
 
         foreach (var decision in _policy.EvaluateAll())
         {
+            // "DISABLED" 는 "유튜브가 꺼졌다(=차단됐다)" 로 잘못 읽히기 쉽다.
+            // 실제 의미는 "이 대상의 차단 기능이 꺼져 있다" 이므로 그대로 적는다.
             var state = decision.Reason == AccessReason.TargetDisabled
-                ? "DISABLED"
+                ? "OFF (차단 안 함)"
                 : ResponseFormatter.BlockedOrAllowed(decision.IsBlocked);
             builder.AppendLine($"{decision.Target.ToDisplayName(),-12}: {state}");
         }
@@ -165,6 +167,20 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         builder.AppendLine();
         builder.AppendLine("Schedule:");
         builder.AppendLine(ResponseFormatter.FormatSchedule(config.Schedule));
+        // 차단이 꺼진 대상이 있으면 그것부터 알려준다.
+        // (스케줄이 맞는데 왜 안 막히냐는 혼동이 가장 흔하다)
+        var offTargets = BlockTargets.Real
+            .Where(t => !config.GetTarget(t).Enabled)
+            .Select(t => t.ToDisplayName())
+            .ToList();
+
+        if (offTargets.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine($"※ {string.Join(", ", offTargets)} 는 차단이 꺼져 있어 스케줄과 무관하게 열립니다.");
+            builder.AppendLine($"   켜려면: enable {offTargets[0].ToLowerInvariant()}");
+        }
+
         builder.AppendLine();
         builder.AppendLine("Temporary Permit:");
         builder.AppendLine(ResponseFormatter.FormatPermits(_permits.GetActive(), nowUtc));
@@ -177,15 +193,35 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         return builder.ToString().TrimEnd();
     }
 
+    /// <summary>
+    /// 대상별 차단 사용 여부.
+    ///
+    /// "ENABLED / DISABLED" 는 "유튜브를 켠다/끈다" 로 오해하기 쉬워서
+    /// "차단 ON / 차단 OFF" 로 적는다. 무엇이 켜지고 꺼지는지 분명하게 보여준다.
+    /// </summary>
     private string BuildTargets()
     {
         var config = _configStore.Current;
         var builder = new StringBuilder();
+
         foreach (var target in BlockTargets.Real)
         {
-            var enabled = config.GetTarget(target).Enabled ? "ENABLED" : "DISABLED";
-            builder.AppendLine($"{target.ToDisplayName(),-8}: {enabled}");
+            var on = config.GetTarget(target).Enabled;
+            builder.AppendLine($"{target.ToDisplayName(),-8}: 차단 {(on ? "ON " : "OFF")}  ({(on ? "스케줄대로 차단" : "차단하지 않음")})");
         }
+
+        var offTargets = BlockTargets.Real
+            .Where(t => !config.GetTarget(t).Enabled)
+            .Select(t => t.ToDisplayName())
+            .ToList();
+
+        if (offTargets.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("※ 차단 OFF 인 대상은 스케줄이 맞아도 차단되지 않습니다.");
+            builder.AppendLine($"   켜려면: enable {offTargets[0].ToLowerInvariant()}");
+        }
+
         return builder.ToString().TrimEnd();
     }
 
@@ -252,7 +288,8 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         // 꺼져 있는 대상에 허용을 주는 것은 의미가 없으므로 알려준다.
         if (target != BlockTarget.All && !_configStore.Current.GetTarget(target).Enabled)
         {
-            return $"ERROR\n{target.ToDisplayName()} is DISABLED.\nBlocking is not applied to it.";
+            return $"ERROR\n{target.ToDisplayName()} 는 차단이 꺼져 있어 이미 열려 있습니다.\n" +
+                   $"일시 허용이 필요 없습니다.\n\n차단을 켜려면: enable {target.ToDisplayName().ToLowerInvariant()}";
         }
 
         var result = _permits.Grant(target, command.Minutes, source);
@@ -352,7 +389,11 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
 
         await SaveAndApplyAsync(config, ct).ConfigureAwait(false);
 
-        return $"OK\n{target.ToDisplayName()} : {(enable ? "ENABLED" : "DISABLED")}\n\n" + BuildTargets();
+        var what = enable
+            ? "차단을 켰습니다. 이제 스케줄에 따라 차단됩니다."
+            : "차단을 껐습니다. 스케줄과 무관하게 차단되지 않습니다.";
+
+        return $"OK\n{target.ToDisplayName()} {what}\n\n" + BuildTargets();
     }
 
     private async Task<string> HandleDomainAsync(RemoteCommand command, CancellationToken ct)

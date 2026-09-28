@@ -387,7 +387,7 @@ $env:TIMEBLOCKER_DATA = "D:\temp\tbdata"
 | 명령 | 별칭 | 설명 |
 |---|---|---|
 | `status` | `s` | 전체 상태 |
-| `targets` | | 대상별 ENABLED / DISABLED |
+| `targets` | | 대상별 차단 ON / OFF |
 | `schedule` | `sch` | 요일별 차단 시간 |
 | `domains youtube` | | 차단 도메인 목록 |
 | `maxpermit` | | 최대 허용 시간 |
@@ -443,14 +443,33 @@ schedule default 21:00 07:00     전체 요일 기본값
 ### 차단 대상 ON/OFF
 
 ```
-enable youtube
-disable youtube
+enable youtube     YouTube 차단 켜기
+disable youtube    YouTube 차단 끄기 (완전히 열어둠)
 enable roblox
 disable roblox
 ```
 
-`disable youtube` 는 **차단 정책 자체에서 YouTube 를 제외**합니다.
+**켜고 끄는 것은 "차단 기능" 이지 사이트가 아닙니다.**
+
+- `enable youtube` → YouTube 를 **차단합니다** (스케줄에 따라)
+- `disable youtube` → YouTube 를 **차단하지 않습니다** (항상 열림)
+
+`targets` 로 확인하면 이렇게 보입니다.
+
+```
+YouTube : 차단 ON   (스케줄대로 차단)
+Roblox  : 차단 OFF  (차단하지 않음)
+```
+
+차단이 꺼진 대상은 `status` 에도 `OFF (차단 안 함)` 으로 표시되고,
+켜는 명령을 함께 안내합니다.
+
+> **판정 우선순위상 차단 OFF 가 가장 앞섭니다.**
+> 스케줄이 차단 시간대여도, 일시 허용이 없어도, 차단 OFF 인 대상은 열립니다.
+> "스케줄을 맞췄는데 왜 안 막히지?" 의 원인이 대부분 이것입니다.
+
 일시 허용(`youtube 30`)과는 다른 개념이며 내부적으로도 분리되어 있습니다.
+일시 허용은 "지금만 잠깐 열기", 차단 OFF 는 "아예 관리 대상에서 빼기" 입니다.
 
 ### 도메인 관리
 

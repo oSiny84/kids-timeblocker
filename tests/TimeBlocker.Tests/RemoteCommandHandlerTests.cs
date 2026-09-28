@@ -116,12 +116,15 @@ public class RemoteCommandHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Targets_ShowsEnabledState()
+    public async Task Targets_ShowsBlockingOnOff()
     {
         var response = await RunAsync("targets");
 
-        Assert.Contains("YouTube : ENABLED", response);
-        Assert.Contains("Roblox  : ENABLED", response);
+        // "ENABLED/DISABLED" 는 "유튜브를 켠다/끈다" 로 오해하기 쉬워
+        // "차단 ON/OFF" 로 표시한다.
+        Assert.Contains("YouTube : 차단 ON", response);
+        Assert.Contains("Roblox  : 차단 ON", response);
+        Assert.DoesNotContain("DISABLED", response);
     }
 
     [Fact]
@@ -209,7 +212,8 @@ public class RemoteCommandHandlerTests : IDisposable
         var response = await RunAsync("youtube 30");
 
         Assert.StartsWith("ERROR", response);
-        Assert.Contains("DISABLED", response);
+        Assert.Contains("차단이 꺼져 있어", response);
+        Assert.Contains("enable youtube", response);
     }
 
     [Fact]
@@ -344,12 +348,16 @@ public class RemoteCommandHandlerTests : IDisposable
         var response = await RunAsync("disable youtube");
 
         Assert.StartsWith("OK", response);
-        Assert.Contains("YouTube : DISABLED", response);
+        Assert.Contains("차단을 껐습니다", response);
+        Assert.Contains("YouTube : 차단 OFF", response);
         Assert.False(_configStore.Current.YouTube.Enabled);
 
         var status = await RunAsync("status");
-        Assert.Contains("YouTube     : DISABLED", status);
+        Assert.Contains("YouTube     : OFF (차단 안 함)", status);
         Assert.Contains("Roblox      : BLOCKED", status);
+
+        // 왜 안 막히는지 status 안에서 바로 알 수 있어야 한다.
+        Assert.Contains("enable youtube", status);
     }
 
     [Fact]

@@ -136,9 +136,9 @@ public static class ResponseFormatter
         schedule sat off
         schedule default 21:00 07:00
 
-        [Target]
-        enable youtube
-        disable youtube
+        [Target] 대상별 차단 ON/OFF
+        enable youtube    YouTube 차단 켜기
+        disable youtube   YouTube 차단 끄기 (완전히 열어둠)
         enable roblox
         disable roblox
 

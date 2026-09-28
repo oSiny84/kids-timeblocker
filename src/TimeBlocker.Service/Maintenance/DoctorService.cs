@@ -368,7 +368,7 @@ public sealed class DoctorService : IDiagnosticsService
         // 이 경우 "차단 시간대가 아님" 같은 엉뚱한 안내를 하면 원인을 못 찾는다.
         if (!config.YouTube.Enabled)
         {
-            return DoctorCheck.Warn(name, $"{domain} - YouTube 차단이 꺼져 있어 확인 불가",
+            return DoctorCheck.Warn(name, $"{domain} - YouTube 차단이 OFF 라 확인 불가",
                 "텔레그램에서 실행: enable youtube");
         }
 
@@ -430,7 +430,7 @@ public sealed class DoctorService : IDiagnosticsService
 
         if (disabled.Count == 0)
         {
-            return DoctorCheck.Pass(name, string.Join(", ", enabled.Select(e => $"{e}=ENABLED")));
+            return DoctorCheck.Pass(name, string.Join(", ", enabled.Select(e => $"{e} 차단 ON")));
         }
 
         var commands = string.Join(", ", disabled.Select(d => $"enable {d.ToLowerInvariant()}"));
@@ -442,7 +442,7 @@ public sealed class DoctorService : IDiagnosticsService
         }
 
         return DoctorCheck.Warn(name,
-            $"{string.Join(", ", disabled)} DISABLED (차단되지 않음)",
+            $"{string.Join(", ", disabled)} 차단 OFF (스케줄과 무관하게 열림)",
             $"텔레그램에서 실행: {commands}");
     }
 
