@@ -190,7 +190,33 @@ Write-Host ""
 Write-Host "[3/4] 압축" -ForegroundColor Yellow
 
 if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
-Compress-Archive -Path $stagingDirectory -DestinationPath $zipPath -CompressionLevel Optimal
+
+# zip 을 직접 구성한다.
+#
+# Compress-Archive 와 ZipFile.CreateFromDirectory(.NET Framework) 는 둘 다
+# 경로 구분자로 역슬래시를 써서 zip 표준을 어긴다. Windows 탐색기는 문제없지만
+# 7-Zip / macOS / Linux 에서 풀면 폴더 구조가 깨질 수 있다.
+# 그래서 항목 이름을 직접 슬래시로 만들어 넣고, UTF-8 로 열어 한글 파일명도 보존한다.
+Add-Type -AssemblyName System.IO.Compression | Out-Null
+Add-Type -AssemblyName System.IO.Compression.FileSystem | Out-Null
+
+$archive = [System.IO.Compression.ZipFile]::Open(
+    $zipPath, [System.IO.Compression.ZipArchiveMode]::Create, [System.Text.Encoding]::UTF8)
+try {
+    # 최상위 폴더(TimeBlocker-<버전>)까지 포함되도록 부모 기준으로 상대 경로를 만든다.
+    $baseLength = (Split-Path $stagingDirectory -Parent).Length + 1
+
+    foreach ($file in (Get-ChildItem $stagingDirectory -Recurse -File)) {
+        # [char]92 = 역슬래시. 따옴표 안에 직접 쓰면 이스케이프 단계에서 사라지기 쉬워 코드로 지정한다.
+        $entryName = $file.FullName.Substring($baseLength).Replace([char]92, '/')
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive, $file.FullName, $entryName,
+            [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+}
+finally {
+    $archive.Dispose()
+}
 
 # 구성 폴더는 지우고 zip 만 남긴다.
 Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
