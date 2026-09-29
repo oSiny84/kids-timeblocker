@@ -151,7 +151,8 @@ TimeBlocker $Version 설치 안내
  1. 브라우저로 아무 사이트나 열어 인터넷이 되는지 확인
     -> 안 되면 dns-restore.bat 실행
  2. 텔레그램에서 봇에게 "status" 전송 -> 응답 확인
- 3. smoke-test.bat 으로 전체 동작 점검 (14개 항목)
+ 3. 텔레그램에서 "msg 테스트" 전송 -> PC 화면에 창이 뜨는지 확인
+ 4. smoke-test.bat 으로 전체 동작 점검 (14개 항목)
 
 [문제가 생기면]
  doctor.bat        상태 종합 점검 (원인과 조치 방법 출력)
@@ -166,13 +167,34 @@ TimeBlocker $Version 설치 안내
    (켜져 있으면 DNS 차단이 우회됩니다)
 
 [주요 텔레그램 명령]
- status              현재 상태
+ status              현재 상태 (막혔는지 + 왜 그런지)
+ list                전체 명령 목록 (help 와 같음)
+
+ 대상 상태 - 셋 중 하나로만 정해집니다
+ auto youtube        스케줄대로 (기본값)
+ block youtube       스케줄 무시하고 계속 막음
+ unblock youtube     스케줄 무시하고 계속 열어둠
+
+ 잠깐만 열어주기 - 시간이 지나면 원래대로 돌아갑니다
  youtube 30          YouTube 30분 허용
  roblox 60           Roblox 60분 허용
- lock                모든 임시 허용 취소
+
  schedule mon-thu 21:00 07:00
  schedule sat off
- help                전체 명령 목록
+
+ msg 밥 먹고 하자    PC 화면에 메시지 띄우기 (답장도 받을 수 있음)
+
+[차단 시간에 게임이 돌고 있으면]
+ PC 화면에 경고가 뜨고 5분 뒤 자동으로 종료됩니다.
+ (1분 남았을 때 한 번 더 알려줍니다)
+ 그 전에 "roblox 30" 으로 허용해 주면 종료가 취소됩니다.
+
+[알림 트레이 앱]
+ TimeBlocker.Notifier.exe 가 함께 설치되어 로그인 시 자동 실행됩니다.
+ 작업표시줄 오른쪽 아래 방패 아이콘으로 보입니다.
+ - 경고창을 띄우고, 아이가 답장을 보낼 수 있게 해줍니다
+ - 아이가 이 앱을 꺼도 차단은 그대로 동작합니다
+   (경고가 Windows 기본 창으로 바뀔 뿐입니다)
 
 자세한 내용은 README.md 를 참고하세요.
 "@
