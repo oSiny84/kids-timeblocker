@@ -44,6 +44,19 @@ if (-not (Test-Path $SourceDirectory)) { throw "게시 폴더가 없습니다. �
 $SourceDirectory = Resolve-Path $SourceDirectory
 $exePath = Join-Path $InstallDirectory 'TimeBlocker.Service.exe'
 
+function Wait-ServiceFullyRemoved([string]$Name, [int]$TimeoutSeconds = 20) {
+    # sc.exe delete 는 비동기다. "삭제 대기(Pending Delete)" 상태로 들어가고,
+    # 이 서비스를 들여다보는 핸들이 전부 닫혀야 실제로 사라진다.
+    # 흔한 원인: Services.msc 창, 작업 관리자의 '서비스' 탭이 열려 있는 경우.
+    # 삭제 대기 상태에서 같은 이름으로 새 서비스를 만들면 나중에 sc.exe create 가 실패한다.
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Get-Service -Name $Name -ErrorAction SilentlyContinue)) { return $true }
+        Start-Sleep -Seconds 1
+    }
+    return -not (Get-Service -Name $Name -ErrorAction SilentlyContinue)
+}
+
 Write-Host "=== TimeBlocker 서비스 설치 ===" -ForegroundColor Cyan
 
 # 1. 기존 서비스가 있으면 정지 후 제거
@@ -55,7 +68,12 @@ if ($existing) {
         $existing.WaitForStatus('Stopped', '00:00:30')
     }
     sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
+
+    if (-not (Wait-ServiceFullyRemoved $ServiceName 20)) {
+        throw "기존 TimeBlocker 서비스가 '삭제 대기(Pending Delete)' 상태로 남아 있어 설치를 진행할 수 없습니다.`n" +
+              "  Services.msc 창이나 작업 관리자의 '서비스' 탭이 열려 있으면 닫고 다시 실행하세요.`n" +
+              "  그래도 안 되면 PC 를 재부팅한 뒤 install.bat 을 다시 실행하세요."
+    }
 }
 else {
     Write-Host "[1/7] 기존 서비스 없음" -ForegroundColor Yellow

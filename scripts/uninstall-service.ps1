@@ -29,6 +29,19 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw "관리자 권한이 필요합니다. 관리자 권한 PowerShell 에서 다시 실행하세요."
 }
 
+function Wait-ServiceFullyRemoved([string]$Name, [int]$TimeoutSeconds = 20) {
+    # sc.exe delete 는 비동기다. "삭제 대기(Pending Delete)" 상태로 들어가고,
+    # 이 서비스를 들여다보는 핸들이 전부 닫혀야 실제로 사라진다.
+    # 흔한 원인: Services.msc 창, 작업 관리자의 '서비스' 탭이 열려 있는 경우.
+    # 그래서 sc.exe delete 직후 바로 성공이라고 믿으면 안 되고, 실제로 사라졌는지 확인해야 한다.
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Get-Service -Name $Name -ErrorAction SilentlyContinue)) { return $true }
+        Start-Sleep -Seconds 1
+    }
+    return -not (Get-Service -Name $Name -ErrorAction SilentlyContinue)
+}
+
 function Remove-DirectorySafely([string]$Path, [string]$Label) {
     # 방금 종료한 프로세스가 DLL 핸들을 잠시 더 쥐고 있을 수 있으므로 몇 번 재시도한다.
     # 권한 때문에 막히는 경우도 있어 소유권과 ACL 을 먼저 정리한다.
@@ -91,9 +104,19 @@ else {
 
 # 3. 서비스 삭제
 Write-Host "[3/5] 서비스 등록 해제" -ForegroundColor Yellow
+$serviceRemoved = $true
 if ($service) {
     sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
+
+    if (Wait-ServiceFullyRemoved $ServiceName 20) {
+        Write-Host "  서비스 등록 삭제 완료"
+    }
+    else {
+        $serviceRemoved = $false
+        Write-Host "  서비스가 '삭제 대기(Pending Delete)' 상태로 남아 있습니다." -ForegroundColor Red
+        Write-Host "  Services.msc 창이나 작업 관리자의 '서비스' 탭이 열려 있으면 닫고 다시 실행하세요." -ForegroundColor Red
+        Write-Host "  그래도 남아 있으면 PC 를 재부팅한 뒤 이 스크립트를 다시 실행하세요." -ForegroundColor Red
+    }
 }
 
 # 4. 알림 트레이 앱 정리
@@ -161,7 +184,8 @@ else {
 }
 
 Write-Host ""
-Write-Host "Service removal   : OK" -ForegroundColor Green
+Write-Host ("Service removal   : " + $(if ($serviceRemoved) { 'OK' } else { 'PENDING (reboot needed)' })) `
+    -ForegroundColor $(if ($serviceRemoved) { 'Green' } else { 'Red' })
 Write-Host ("File cleanup      : " + $(if ($filesRemoved) { 'OK' } else { 'FAILED' })) `
     -ForegroundColor $(if ($filesRemoved) { 'Green' } else { 'Red' })
 Write-Host ""
@@ -170,6 +194,14 @@ if ($restoreFailed) {
     Write-Host "제거는 끝났지만 일부 시스템 복구가 실패했습니다." -ForegroundColor Red
     Write-Host "인터넷이 되지 않으면 네트워크 설정에서 DNS 를 '자동으로 DNS 서버 주소 받기'로 바꾸세요." -ForegroundColor Red
     exit 2
+}
+
+if (-not $serviceRemoved) {
+    # DNS/hosts/방화벽 복구는 이미 [2/5] 에서 끝났으므로 인터넷은 안전하다.
+    # 남은 건 서비스 등록뿐이고, 재부팅하면 핸들이 강제로 풀려 사라진다.
+    Write-Host "시스템은 정상 복구되었습니다. 다만 서비스 등록이 '삭제 대기' 상태로 남아 있습니다." -ForegroundColor Yellow
+    Write-Host "PC 를 재부팅하면 사라집니다. 재부팅 전에는 같은 이름으로 재설치할 수 없습니다." -ForegroundColor Yellow
+    exit 4
 }
 
 if (-not $filesRemoved) {
