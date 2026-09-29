@@ -5,6 +5,49 @@ Windows 10 / 11 에서 **시간대별로 YouTube / Roblox 접근을 차단**하�
 관리자는 **Telegram 채팅창을 원격 콘솔처럼 사용해서** 상태를 확인하고, 차단 시간을 바꾸고,
 필요할 때 일시 허용을 줄 수 있습니다. 차단 대상 PC 에는 설정 GUI 가 없습니다.
 
+---
+
+## ⚡ 빠른 설치 (부모님용, 5분)
+
+**자녀 PC 에 설치할 때 이 순서만 따라 하시면 됩니다.** (빌드/개발 관련 내용은 아래 "1. 프로그램 구조" 부터입니다)
+
+### 1) 준비물 두 가지 받기
+
+| 무엇 | 받는 곳 |
+|---|---|
+| **.NET 8 Desktop Runtime** | [다운로드 페이지](https://dotnet.microsoft.com/download/dotnet/8.0) → **"Desktop Runtime" x64** 클릭 |
+| **TimeBlocker 설치 파일** | [최신 릴리즈](https://github.com/oSiny84/kids-timeblocker/releases/latest) → `TimeBlocker-*.zip` 다운로드 |
+
+### 2) 텔레그램 봇 만들기 (한 번만 하면 됩니다)
+
+1. 텔레그램 앱에서 **@BotFather** 검색 → `/newbot` 전송 → 안내대로 이름 정하면 **Bot Token** 을 줍니다 (긴 문자열, 복사해두기)
+2. 텔레그램 앱에서 **@userinfobot** 검색 → 아무 메시지나 전송 → 내 **숫자 User ID** 확인
+3. 방금 만든 내 봇을 검색해서 `/start` 한 번 보내두기 (안 하면 봇이 메시지를 못 받습니다)
+
+### 3) 설치
+
+1. 받은 zip 파일 압축 풀기
+2. **`install.bat`** 더블클릭 실행
+   - "게시자를 확인할 수 없습니다" 같은 경고가 뜨면 **"예" / "실행"** 선택
+   - Bot Token, User ID 를 물어보면 2번에서 받은 값을 붙여넣기
+3. 설치가 끝나면 자동으로 점검(`doctor`)이 실행됩니다
+
+### 4) 잘 됐는지 확인
+
+방금 만든 봇에게 텔레그램으로 이렇게 쳐보세요.
+
+```
+status
+```
+
+응답이 오면 성공입니다. 이상하면 `doctor` 를 쳐서 원인과 조치 방법을 확인하세요.
+전체 명령어 목록은 `help` (또는 `list`) 로 볼 수 있습니다.
+
+> **자녀 계정은 꼭 "표준 사용자"로 만들어 주세요.** 관리자 계정이면 서비스를 직접 끌 수 있어
+> 의미가 없습니다. (설정 → 계정 → 가족 및 다른 사용자)
+
+---
+
 ```
         [관리자 스마트폰]
                │
@@ -79,7 +122,7 @@ TimeBlocker.sln
 - Windows 10 / Windows 11
 - .NET 8 (현재 LTS)
   - 빌드: .NET SDK 8.0 이상 (SDK 9 로도 빌드됩니다)
-  - 실행: .NET 8 Desktop Runtime — 또는 self-contained 로 게시
+  - 실행: [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — 또는 self-contained 로 게시
 - 관리자 권한 (설치 및 설정 시)
 - 외부 유료 라이브러리 없음 (NuGet 은 Microsoft 공식 패키지만 사용)
 
@@ -134,7 +177,7 @@ powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1
 `release\TimeBlocker-<버전>.zip` 이 생성됩니다. 안에는 실행파일, 설치 스크립트,
 `.bat` 실행 파일, README, `설치안내.txt` 가 들어 있고 **소스와 빌드 도구는 들어가지 않습니다.**
 
-대상 PC 에는 .NET SDK 가 필요 없고 **.NET 8 Desktop Runtime** 만 있으면 됩니다.
+대상 PC 에는 .NET SDK 가 필요 없고 **[.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)** 만 있으면 됩니다.
 압축을 푼 뒤 `install.bat` 을 실행하면 설치됩니다.
 
 
