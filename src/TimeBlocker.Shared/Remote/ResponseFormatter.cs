@@ -137,7 +137,8 @@ public static class ResponseFormatter
         schedule default 21:00 07:00
 
         [Target] 무엇을 막을지
-        block youtube       YouTube 를 막는다
+        block youtube       YouTube 를 스케줄대로 막는다
+                            (일시 허용 중이면 같이 취소된다)
         unblock youtube     YouTube 를 안 막는다 (항상 열어둠)
         block roblox
         unblock roblox

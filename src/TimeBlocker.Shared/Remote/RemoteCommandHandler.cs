@@ -102,7 +102,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
                 RemoteCommandType.SetSchedule or RemoteCommandType.SetDefaultSchedule =>
                     await HandleSetScheduleAsync(command, cancellationToken).ConfigureAwait(false),
                 RemoteCommandType.EnableTarget or RemoteCommandType.DisableTarget =>
-                    await HandleEnableDisableAsync(command, cancellationToken).ConfigureAwait(false),
+                    await HandleEnableDisableAsync(command, source, cancellationToken).ConfigureAwait(false),
                 RemoteCommandType.AddDomain or RemoteCommandType.RemoveDomain =>
                     await HandleDomainAsync(command, cancellationToken).ConfigureAwait(false),
                 RemoteCommandType.SetMaxPermit =>
@@ -379,7 +379,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         return "OK\nSchedule updated.\n\n" + ResponseFormatter.FormatScheduleDetailed(config.Schedule);
     }
 
-    private async Task<string> HandleEnableDisableAsync(RemoteCommand command, CancellationToken ct)
+    private async Task<string> HandleEnableDisableAsync(RemoteCommand command, string source, CancellationToken ct)
     {
         var target = command.Target!.Value;
         var enable = command.Type == RemoteCommandType.EnableTarget;
@@ -392,6 +392,18 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
             config.GetTarget(one).Enabled = enable;
         }
 
+        // 일시 허용은 스케줄을 덮어쓰는 예외다.
+        // "막아라" 라고 했는데 예외가 살아 있으면 명령이 먹지 않는 것처럼 보이므로 같이 치운다.
+        // 취소해도 즉시 잠기는 게 아니라, 스케줄 판단으로 돌아갈 뿐이다.
+        var cancelledPermits = 0;
+        if (enable)
+        {
+            foreach (var one in applied)
+            {
+                cancelledPermits += _permits.Cancel(one, source);
+            }
+        }
+
         await SaveAndApplyAsync(config, ct).ConfigureAwait(false);
 
         var what = enable
@@ -402,7 +414,9 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
             ? string.Join(", ", applied.Select(t => t.ToDisplayName()))
             : target.ToDisplayName();
 
-        return $"OK\n{label} {what}\n\n" + BuildTargets();
+        var note = cancelledPermits > 0 ? "\n진행 중이던 일시 허용도 취소했습니다." : string.Empty;
+
+        return $"OK\n{label} {what}{note}\n\n" + BuildTargets();
     }
 
     private async Task<string> HandleDomainAsync(RemoteCommand command, CancellationToken ct)
