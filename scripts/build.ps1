@@ -45,6 +45,12 @@ try {
         -c $Configuration -o $OutputDirectory --nologo
     if ($LASTEXITCODE -ne 0) { throw "Admin 게시 실패" }
 
+    # 사용자 세션에서 도는 알림 트레이 앱.
+    # 서비스(세션 0)는 화면에 창을 띄울 수 없어 이 앱이 대신 보여준다.
+    dotnet publish src\TimeBlocker.Notifier\TimeBlocker.Notifier.csproj `
+        -c $Configuration -o $OutputDirectory --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Notifier 게시 실패" }
+
     Write-Host "`n완료. 게시 폴더: $OutputDirectory" -ForegroundColor Green
     Write-Host "다음 단계: 관리자 권한으로 scripts\install-service.ps1 실행" -ForegroundColor Green
 }

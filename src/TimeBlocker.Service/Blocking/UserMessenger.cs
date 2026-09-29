@@ -1,5 +1,6 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using TimeBlocker.Shared.Core;
+using TimeBlocker.Shared.Notifications;
 
 namespace TimeBlocker.Service.Blocking;
 
@@ -9,18 +10,18 @@ namespace TimeBlocker.Service.Blocking;
 /// </summary>
 public sealed class UserMessenger : IUserMessenger
 {
-    private readonly IUserSessionNotifier _notifier;
+    private readonly IUserAlertService _alerts;
     private readonly ILogger<UserMessenger> _logger;
 
-    public UserMessenger(IUserSessionNotifier notifier, ILogger<UserMessenger> logger)
+    public UserMessenger(IUserAlertService alerts, ILogger<UserMessenger> logger)
     {
-        _notifier = notifier;
+        _alerts = alerts;
         _logger = logger;
     }
 
     public Task<int> SendToPcAsync(string message, CancellationToken cancellationToken = default)
     {
-        var shown = _notifier.Notify("부모님 메시지", message);
+        var shown = _alerts.Alert(NotificationKind.Message, "부모님 메시지", message);
 
         // 본문은 남기지 않는다. 언제 몇 개 띄웠는지만 기록한다.
         _logger.LogInformation("PC 화면 메시지를 표시했습니다. (창 {Count}개, {Length}자)", shown, message.Length);

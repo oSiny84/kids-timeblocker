@@ -49,7 +49,7 @@ Write-Host "=== TimeBlocker 서비스 설치 ===" -ForegroundColor Cyan
 # 1. 기존 서비스가 있으면 정지 후 제거
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
-    Write-Host "[1/6] 기존 서비스 정지 및 제거" -ForegroundColor Yellow
+    Write-Host "[1/7] 기존 서비스 정지 및 제거" -ForegroundColor Yellow
     if ($existing.Status -ne 'Stopped') {
         Stop-Service -Name $ServiceName -Force
         $existing.WaitForStatus('Stopped', '00:00:30')
@@ -58,11 +58,11 @@ if ($existing) {
     Start-Sleep -Seconds 2
 }
 else {
-    Write-Host "[1/6] 기존 서비스 없음" -ForegroundColor Yellow
+    Write-Host "[1/7] 기존 서비스 없음" -ForegroundColor Yellow
 }
 
 # 2. 파일 복사
-Write-Host "[2/6] 파일 복사 -> $InstallDirectory" -ForegroundColor Yellow
+Write-Host "[2/7] 파일 복사 -> $InstallDirectory" -ForegroundColor Yellow
 
 # 기존 설치 폴더를 통째로 지우고 새로 넣는다.
 # 덮어쓰기만 하면 구버전에만 있던 파일이 남아, 나중에 엉뚱한 DLL 이 로드될 수 있다.
@@ -106,7 +106,7 @@ New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
 Copy-Item -Path (Join-Path $SourceDirectory '*') -Destination $InstallDirectory -Recurse -Force
 
 # 3. 설치 폴더 권한: SYSTEM/Administrators 만 쓰기, 일반 사용자는 읽기만
-Write-Host "[3/6] 설치 폴더 권한 설정" -ForegroundColor Yellow
+Write-Host "[3/7] 설치 폴더 권한 설정" -ForegroundColor Yellow
 
 # 주의: (OI)(CI) 상속 플래그는 "폴더"에만 유효하다.
 # /T 로 파일에까지 같은 ACE 를 적용하려 하면 파일에서 실패하고,
@@ -128,7 +128,7 @@ if ($aclProbe -match 'Access is denied|액세스가 거부') {
 }
 
 # 4. Telegram 설정 (서비스 시작 전에 먼저 넣는다)
-Write-Host "[4/6] Telegram 설정" -ForegroundColor Yellow
+Write-Host "[4/7] Telegram 설정" -ForegroundColor Yellow
 if ($BotToken) {
     & $exePath set-token $BotToken
 }
@@ -150,7 +150,7 @@ if ($BotToken -and $AdminUserId -ne 0) {
 }
 
 # 5. 서비스 등록
-Write-Host "[5/6] 서비스 등록" -ForegroundColor Yellow
+Write-Host "[5/7] 서비스 등록" -ForegroundColor Yellow
 sc.exe create $ServiceName binPath= "`"$exePath`"" start= auto obj= "LocalSystem" `
     DisplayName= "TimeBlocker Access Control Service" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "서비스 등록 실패" }
@@ -171,8 +171,39 @@ sc.exe failure $ServiceName reset= 86400 actions= restart/10000/restart/30000/re
 # 정상 종료가 아닌 모든 종료(0이 아닌 종료 코드 포함)에 복구 동작을 적용한다.
 sc.exe failureflag $ServiceName 1 | Out-Null
 
-# 6. 시작
-Write-Host "[6/6] 서비스 시작" -ForegroundColor Yellow
+# 6. 알림 트레이 앱을 로그인 시 자동 실행하도록 등록
+#
+# 서비스는 세션 0 에서 돌기 때문에 화면에 창을 띄울 수 없다.
+# 이 앱이 사용자 세션에서 경고창과 답장 칸을 보여준다.
+#
+# HKLM Run 에 넣으면 이 PC 에 로그인하는 모든 계정에서 실행된다.
+# 숨기지 않는다. 작업 관리자의 시작프로그램 탭에 그대로 보인다.
+Write-Host "[6/7] 알림 트레이 앱 등록" -ForegroundColor Yellow
+
+$notifierPath = Join-Path $InstallDirectory 'TimeBlocker.Notifier.exe'
+if (Test-Path $notifierPath) {
+    $runKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+    New-ItemProperty -Path $runKey -Name 'TimeBlockerNotifier' `
+        -Value "`"$notifierPath`"" -PropertyType String -Force | Out-Null
+    Write-Host "  등록 완료. 다음 로그인부터 자동 실행됩니다." -ForegroundColor DarkGray
+
+    # 지금 로그인해 있는 사용자를 위해 한 번 띄워 준다.
+    # 서비스 계정(SYSTEM)에서 실행하면 보이지 않으므로 실패해도 넘어간다.
+    try {
+        Start-Process -FilePath $notifierPath -ErrorAction Stop
+        Write-Host "  지금 세션에서도 실행했습니다." -ForegroundColor DarkGray
+    }
+    catch {
+        Write-Host "  지금은 실행하지 못했습니다. 다시 로그인하면 자동으로 뜹니다." -ForegroundColor DarkYellow
+    }
+}
+else {
+    Write-Host "  TimeBlocker.Notifier.exe 가 없어 건너뜁니다." -ForegroundColor DarkYellow
+    Write-Host "  (build.ps1 을 다시 실행해 게시하세요)" -ForegroundColor DarkYellow
+}
+
+# 7. 시작
+Write-Host "[7/7] 서비스 시작" -ForegroundColor Yellow
 Start-Service -Name $ServiceName
 (Get-Service -Name $ServiceName).WaitForStatus('Running', '00:00:30')
 

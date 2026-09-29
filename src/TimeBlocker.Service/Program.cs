@@ -135,6 +135,10 @@ public static class Program
         services.AddSingleton<IRunningProcessTracker, RunningProcessTracker>();
         services.AddSingleton<ProcessEnforcer>();
         services.AddSingleton<IUserMessenger, UserMessenger>();
+        services.AddSingleton<IUserAlertService, UserAlertService>();
+        services.AddSingleton<NotifierHub>();
+        services.AddSingleton<INotificationHub>(sp => sp.GetRequiredService<NotifierHub>());
+        services.AddHostedService(sp => sp.GetRequiredService<NotifierHub>());
 
         // --- 진단 / 원상복구 (doctor, cleanup 공통) ---
         services.AddSingleton<IDiagnosticsService>(sp => new DoctorService(
@@ -143,7 +147,8 @@ public static class Program
             sp.GetRequiredService<IFirewallManager>(),
             sp.GetRequiredService<INetworkAdapterDnsConfigurator>(),
             sp.GetRequiredService<RobloxLocator>(),
-            sp.GetRequiredService<ILogger<DoctorService>>()));
+            sp.GetRequiredService<ILogger<DoctorService>>(),
+            sp.GetRequiredService<INotificationHub>()));
 
         services.AddSingleton<ISystemRestoreService>(sp => new SystemRestoreService(
             sp.GetRequiredService<IHostsFileManager>(),
@@ -171,7 +176,9 @@ public static class Program
 
         // --- 원격 채널 ---
         services.AddSingleton<IHttpClientFactoryLite, SharedHttpClientFactory>();
-        services.AddSingleton<IRemoteCommandProvider, TelegramRemoteCommandProvider>();
+        services.AddSingleton<TelegramRemoteCommandProvider>();
+        services.AddSingleton<IRemoteCommandProvider>(sp => sp.GetRequiredService<TelegramRemoteCommandProvider>());
+        services.AddSingleton<IAdminNotifier>(sp => sp.GetRequiredService<TelegramRemoteCommandProvider>());
 
         // --- 백그라운드 작업 ---
         services.AddHostedService<EnforcementWorker>();

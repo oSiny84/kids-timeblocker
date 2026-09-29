@@ -61,17 +61,17 @@ $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 
 # 1. 서비스 정지 (차단 정리 전에 멈춰야 다시 적용되지 않는다)
 if ($service -and $service.Status -ne 'Stopped') {
-    Write-Host "[1/4] 서비스 정지" -ForegroundColor Yellow
+    Write-Host "[1/5] 서비스 정지" -ForegroundColor Yellow
     Stop-Service -Name $ServiceName -Force
     $service.WaitForStatus('Stopped', '00:00:30')
 }
 else {
-    Write-Host "[1/4] 서비스가 실행 중이 아닙니다" -ForegroundColor Yellow
+    Write-Host "[1/5] 서비스가 실행 중이 아닙니다" -ForegroundColor Yellow
 }
 
 # 2. 차단 상태 정리 (cleanup 과 동일한 공통 로직 사용)
 #    어느 단계가 실패해도 나머지는 계속 수행되고, 마지막에 요약이 출력된다.
-Write-Host "[2/4] 시스템 원상복구 (DNS / hosts / 방화벽 / 상태파일)" -ForegroundColor Yellow
+Write-Host "[2/5] 시스템 원상복구 (DNS / hosts / 방화벽 / 상태파일)" -ForegroundColor Yellow
 $restoreFailed = $false
 if (Test-Path $exePath) {
     & $exePath cleanup state
@@ -90,16 +90,48 @@ else {
 }
 
 # 3. 서비스 삭제
-Write-Host "[3/4] 서비스 등록 해제" -ForegroundColor Yellow
+Write-Host "[3/5] 서비스 등록 해제" -ForegroundColor Yellow
 if ($service) {
     sc.exe delete $ServiceName | Out-Null
     Start-Sleep -Seconds 2
 }
 
+# 4. 알림 트레이 앱 정리
+#    자동 실행 등록을 지우고, 지금 떠 있는 것도 닫는다.
+#    여기서 안 지우면 로그인할 때마다 없는 프로그램을 실행하려 한다.
+Write-Host "[4/5] 알림 트레이 앱 정리" -ForegroundColor Yellow
+
+$runKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+try {
+    if (Get-ItemProperty -Path $runKey -Name 'TimeBlockerNotifier' -ErrorAction SilentlyContinue) {
+        Remove-ItemProperty -Path $runKey -Name 'TimeBlockerNotifier' -Force -ErrorAction Stop
+        Write-Host "  자동 실행 등록 삭제"
+    }
+    else {
+        Write-Host "  자동 실행 등록 없음"
+    }
+}
+catch {
+    Write-Host "  자동 실행 등록을 지우지 못했습니다: $($_.Exception.Message)" -ForegroundColor Red
+}
+
+# 실행 중이면 파일을 잠그고 있어 폴더 삭제가 실패한다. 먼저 닫는다.
+try {
+    $running = Get-Process -Name 'TimeBlocker.Notifier' -ErrorAction SilentlyContinue
+    if ($running) {
+        $running | Stop-Process -Force -ErrorAction Stop
+        Start-Sleep -Seconds 1
+        Write-Host "  실행 중이던 트레이 앱 종료 ($($running.Count)개)"
+    }
+}
+catch {
+    Write-Host "  트레이 앱을 닫지 못했습니다: $($_.Exception.Message)" -ForegroundColor DarkYellow
+}
+
 # 4. 파일 삭제
-#    여기서 실패해도 스크립트를 중단하지 않는다. 시스템 복구는 이미 [2/4] 에서 끝났고,
+#    여기서 실패해도 스크립트를 중단하지 않는다. 시스템 복구는 이미 [2/5] 에서 끝났고,
 #    남은 파일은 나중에 지워도 되기 때문이다. 결과만 정확히 알려준다.
-Write-Host "[4/4] 파일 정리" -ForegroundColor Yellow
+Write-Host "[5/5] 파일 정리" -ForegroundColor Yellow
 
 $filesRemoved = $true
 

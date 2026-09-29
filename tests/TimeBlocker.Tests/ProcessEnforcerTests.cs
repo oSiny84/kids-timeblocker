@@ -1,8 +1,9 @@
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using TimeBlocker.Service.Blocking;
 using TimeBlocker.Shared.Common;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Models;
+using TimeBlocker.Shared.Notifications;
 using Xunit;
 
 namespace TimeBlocker.Tests;
@@ -214,13 +215,13 @@ public class ProcessEnforcerTests
         }
     }
 
-    private sealed class FakeNotifier : IUserSessionNotifier
+    private sealed class FakeNotifier : IUserAlertService
     {
         public List<string> Messages { get; } = new();
 
-        public int Notify(string title, string message)
+        public int Alert(NotificationKind kind, string title, string body, bool allowReply = true)
         {
-            Messages.Add(message);
+            Messages.Add(body);
             return 1;
         }
     }

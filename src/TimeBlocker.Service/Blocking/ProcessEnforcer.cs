@@ -1,7 +1,8 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using TimeBlocker.Shared.Common;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Models;
+using TimeBlocker.Shared.Notifications;
 
 namespace TimeBlocker.Service.Blocking;
 
@@ -23,7 +24,7 @@ public sealed class ProcessEnforcer
     private static readonly TimeSpan FinalWarning = TimeSpan.FromMinutes(1);
 
     private readonly IRunningProcessTracker _processes;
-    private readonly IUserSessionNotifier _notifier;
+    private readonly IUserAlertService _alerts;
     private readonly ISystemClock _clock;
     private readonly ILogger<ProcessEnforcer> _logger;
 
@@ -32,12 +33,12 @@ public sealed class ProcessEnforcer
 
     public ProcessEnforcer(
         IRunningProcessTracker processes,
-        IUserSessionNotifier notifier,
+        IUserAlertService alerts,
         ISystemClock clock,
         ILogger<ProcessEnforcer> logger)
     {
         _processes = processes;
-        _notifier = notifier;
+        _alerts = alerts;
         _clock = clock;
         _logger = logger;
     }
@@ -144,7 +145,8 @@ public sealed class ProcessEnforcer
             "{Target} 프로세스 {Killed}/{Total} 개를 종료했습니다. (차단 시간)",
             target.ToDisplayName(), killed, running.Count);
 
-        _notifier.Notify(
+        _alerts.Alert(
+            NotificationKind.Terminated,
             "TimeBlocker",
             $"지금은 {target.ToDisplayName()} 차단 시간이라 종료했습니다.\n\n" +
             "더 하고 싶으면 부모님께 말씀드리세요.");
@@ -158,7 +160,8 @@ public sealed class ProcessEnforcer
         var minutes = (int)Math.Round(grace.TotalMinutes);
         var localDeadline = deadlineUtc.ToLocalTime();
 
-        _notifier.Notify(
+        _alerts.Alert(
+            NotificationKind.Warning,
             "TimeBlocker",
             $"지금은 {target.ToDisplayName()} 차단 시간입니다.\n\n" +
             $"{minutes}분 뒤인 {localDeadline:HH:mm} 에 자동으로 종료됩니다.\n" +
@@ -167,7 +170,8 @@ public sealed class ProcessEnforcer
 
     private void WarnFinal(BlockTarget target)
     {
-        _notifier.Notify(
+        _alerts.Alert(
+            NotificationKind.Warning,
             "TimeBlocker",
             $"{target.ToDisplayName()} 이(가) 1분 뒤 종료됩니다.\n\n지금 저장하세요.");
     }

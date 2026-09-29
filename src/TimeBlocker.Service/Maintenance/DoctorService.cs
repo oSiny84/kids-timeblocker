@@ -1,3 +1,4 @@
+using TimeBlocker.Service.Ipc;
 ﻿using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -35,13 +36,16 @@ public sealed class DoctorService : IDiagnosticsService
     private readonly RobloxLocator _locator;
     private readonly ILogger _logger;
 
+    private readonly INotificationHub? _notifierHub;
+
     public DoctorService(
         IConfigurationStore configStore,
         IHostsFileManager hosts,
         IFirewallManager firewall,
         INetworkAdapterDnsConfigurator adapters,
         RobloxLocator locator,
-        ILogger logger)
+        ILogger logger,
+        INotificationHub? notifierHub = null)
     {
         _configStore = configStore;
         _hosts = hosts;
@@ -49,6 +53,7 @@ public sealed class DoctorService : IDiagnosticsService
         _adapters = adapters;
         _locator = locator;
         _logger = logger;
+        _notifierHub = notifierHub;
     }
 
     public async Task<DoctorReport> RunAsync(CancellationToken ct = default)
@@ -88,6 +93,7 @@ public sealed class DoctorService : IDiagnosticsService
         report.Add(CheckHostsRegionSanity());
         report.Add(await CheckFirewallAsync(config, ct).ConfigureAwait(false));
         report.Add(CheckRoblox(config));
+        report.Add(CheckNotifierApp());
 
         // --- Telegram ---
         report.Add(CheckTelegramConfigured(config));
@@ -441,6 +447,27 @@ public sealed class DoctorService : IDiagnosticsService
         return DoctorCheck.Warn(name,
             $"{string.Join(", ", open)} 가 unblock 상태 (스케줄과 무관하게 열림)",
             $"텔레그램에서 실행: {commands}");
+    }
+
+    /// <summary>
+    /// 알림 트레이 앱이 붙어 있는지. 안 붙어 있으면 경고창이 Windows 기본 창으로 뜨고
+    /// 아이가 답장을 보낼 수 없다.
+    /// </summary>
+    private DoctorCheck CheckNotifierApp()
+    {
+        const string name = "Notifier app";
+
+        if (_notifierHub is null) return DoctorCheck.Warn(name, "확인할 수 없음");
+
+        if (_notifierHub.HasClients)
+        {
+            return DoctorCheck.Pass(name, "연결됨 (경고창 + 답장 가능)");
+        }
+
+        return DoctorCheck.Warn(name,
+            "연결 안 됨 (경고는 Windows 기본 창으로 뜨고, 답장은 불가)",
+            "PC 에 로그인했는지 확인하세요. 트레이 앱은 로그인 시 자동 실행됩니다. " +
+            "계속 안 되면 설치 폴더의 TimeBlocker.Notifier.exe 를 직접 실행해 보세요.");
     }
 
     // ==================================================== hosts / 방화벽

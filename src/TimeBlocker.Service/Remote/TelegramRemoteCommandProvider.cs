@@ -1,4 +1,5 @@
-using System.Text;
+using TimeBlocker.Shared.Core;
+﻿using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TimeBlocker.Shared.Common;
@@ -17,7 +18,7 @@ namespace TimeBlocker.Service.Remote;
 ///  - 허용된 숫자 User ID 이외의 메시지는 처리하지 않는다. (username 으로 인증하지 않는다)
 ///  - Bot Token 은 절대 로그에 남기지 않는다.
 /// </summary>
-public sealed class TelegramRemoteCommandProvider : IRemoteCommandProvider
+public sealed class TelegramRemoteCommandProvider : IRemoteCommandProvider, IAdminNotifier
 {
     private const string ApiBase = "https://api.telegram.org";
 
@@ -41,6 +42,30 @@ public sealed class TelegramRemoteCommandProvider : IRemoteCommandProvider
         _handler = handler;
         _httpFactory = httpFactory;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// PC 쪽에서 생긴 일(아이 답장 등)을 관리자 전원에게 먼저 보낸다.
+    /// 등록된 User ID 로만 보낸다. 새 사용자를 여기서 알게 되는 일은 없다.
+    /// </summary>
+    public async Task<int> NotifyAdminsAsync(string message, CancellationToken cancellationToken = default)
+    {
+        var settings = _configStore.Current.Telegram;
+        if (!settings.Enabled) return 0;
+
+        var token = SecretProtector.Unprotect(settings.ProtectedBotToken);
+        if (string.IsNullOrWhiteSpace(token)) return 0;
+
+        var sent = 0;
+        foreach (var userId in settings.AllowedUserIds)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+
+            // 관리자 1명이 실패해도 나머지에게는 계속 보낸다.
+            if (await SendMessageAsync(token, userId, message, cancellationToken).ConfigureAwait(false)) sent++;
+        }
+
+        return sent;
     }
 
     public string Name => "Telegram";
@@ -200,7 +225,8 @@ public sealed class TelegramRemoteCommandProvider : IRemoteCommandProvider
         }
     }
 
-    private async Task SendMessageAsync(string token, long chatId, string text, CancellationToken ct)
+    /// <summary>전송 성공 여부를 돌려준다.</summary>
+    private async Task<bool> SendMessageAsync(string token, long chatId, string text, CancellationToken ct)
     {
         try
         {
@@ -226,11 +252,15 @@ public sealed class TelegramRemoteCommandProvider : IRemoteCommandProvider
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Telegram sendMessage 실패: 코드 {Code}", (int)response.StatusCode);
+                return false;
             }
+
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning("Telegram 응답 전송 실패: {Error}", ex.GetType().Name);
+            return false;
         }
     }
 
