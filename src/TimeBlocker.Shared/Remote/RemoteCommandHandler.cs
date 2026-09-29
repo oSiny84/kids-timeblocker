@@ -178,7 +178,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         {
             builder.AppendLine();
             builder.AppendLine($"※ {string.Join(", ", offTargets)} 는 차단이 꺼져 있어 스케줄과 무관하게 열립니다.");
-            builder.AppendLine($"   켜려면: block {offTargets[0].ToLowerInvariant()} on");
+            builder.AppendLine($"   켜려면: block {offTargets[0].ToLowerInvariant()}");
         }
 
         builder.AppendLine();
@@ -219,7 +219,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         {
             builder.AppendLine();
             builder.AppendLine("※ 차단 OFF 인 대상은 스케줄이 맞아도 차단되지 않습니다.");
-            builder.AppendLine($"   켜려면: block {offTargets[0].ToLowerInvariant()} on");
+            builder.AppendLine($"   켜려면: block {offTargets[0].ToLowerInvariant()}");
         }
 
         return builder.ToString().TrimEnd();
@@ -289,7 +289,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         if (target != BlockTarget.All && !_configStore.Current.GetTarget(target).Enabled)
         {
             return $"ERROR\n{target.ToDisplayName()} 는 차단이 꺼져 있어 이미 열려 있습니다.\n" +
-                   $"일시 허용이 필요 없습니다.\n\n차단을 켜려면: block {target.ToDisplayName().ToLowerInvariant()} on";
+                   $"일시 허용이 필요 없습니다.\n\n차단을 켜려면: block {target.ToDisplayName().ToLowerInvariant()}";
         }
 
         var result = _permits.Grant(target, command.Minutes, source);
@@ -383,9 +383,14 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
     {
         var target = command.Target!.Value;
         var enable = command.Type == RemoteCommandType.EnableTarget;
-
         var config = _configStore.Current;
-        config.GetTarget(target).Enabled = enable;
+
+        // "block all" / "unblock all" 은 실제 대상 전부에 적용한다.
+        var applied = target == BlockTarget.All ? BlockTargets.Real : new[] { target };
+        foreach (var one in applied)
+        {
+            config.GetTarget(one).Enabled = enable;
+        }
 
         await SaveAndApplyAsync(config, ct).ConfigureAwait(false);
 
@@ -393,7 +398,11 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
             ? "차단을 켰습니다. 이제 스케줄에 따라 차단됩니다."
             : "차단을 껐습니다. 스케줄과 무관하게 차단되지 않습니다.";
 
-        return $"OK\n{target.ToDisplayName()} {what}\n\n" + BuildTargets();
+        var label = target == BlockTarget.All
+            ? string.Join(", ", applied.Select(t => t.ToDisplayName()))
+            : target.ToDisplayName();
+
+        return $"OK\n{label} {what}\n\n" + BuildTargets();
     }
 
     private async Task<string> HandleDomainAsync(RemoteCommand command, CancellationToken ct)

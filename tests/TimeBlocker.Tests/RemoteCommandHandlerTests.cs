@@ -213,7 +213,7 @@ public class RemoteCommandHandlerTests : IDisposable
 
         Assert.StartsWith("ERROR", response);
         Assert.Contains("차단이 꺼져 있어", response);
-        Assert.Contains("block youtube on", response);
+        Assert.Contains("block youtube", response);
     }
 
     [Fact]
@@ -357,7 +357,7 @@ public class RemoteCommandHandlerTests : IDisposable
         Assert.Contains("Roblox      : BLOCKED", status);
 
         // 왜 안 막히는지 status 안에서 바로 알 수 있어야 한다.
-        Assert.Contains("block youtube on", status);
+        Assert.Contains("block youtube", status);
     }
 
     [Fact]

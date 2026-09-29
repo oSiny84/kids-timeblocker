@@ -369,7 +369,7 @@ public sealed class DoctorService : IDiagnosticsService
         if (!config.YouTube.Enabled)
         {
             return DoctorCheck.Warn(name, $"{domain} - YouTube 차단이 OFF 라 확인 불가",
-                "텔레그램에서 실행: block youtube on");
+                "텔레그램에서 실행: block youtube");
         }
 
         // 시스템 해석이 우리 경로를 거치지 않는 상태라면, 시스템 확인자로 물어봐야 의미가 없다.
@@ -433,7 +433,7 @@ public sealed class DoctorService : IDiagnosticsService
             return DoctorCheck.Pass(name, string.Join(", ", enabled.Select(e => $"{e} 차단 ON")));
         }
 
-        var commands = string.Join(", ", disabled.Select(d => $"block {d.ToLowerInvariant()} on"));
+        var commands = string.Join(", ", disabled.Select(d => $"block {d.ToLowerInvariant()}"));
 
         if (enabled.Count == 0)
         {

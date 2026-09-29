@@ -443,17 +443,23 @@ schedule default 21:00 07:00     전체 요일 기본값
 ### 차단 대상 ON/OFF
 
 ```
-block youtube on     YouTube 를 막는다
-block youtube off    YouTube 를 안 막는다 (항상 열어둠)
-block roblox on
-block roblox off
+block youtube       YouTube 를 막는다
+unblock youtube     YouTube 를 안 막는다 (항상 열어둠)
+block roblox
+unblock roblox
+block all           전부 막는다
+unblock all         전부 안 막는다
 ```
 
 `enable youtube` / `disable youtube` 도 같은 뜻이지만, **"유튜브를 켠다/끈다" 로 읽히기 쉬워
 `block ... on/off` 를 권합니다.** 켜고 꺼지는 것은 사이트가 아니라 "차단 기능" 입니다.
 
-> `block all` 은 다른 뜻입니다. 이건 **일시 허용을 전부 취소**하는 `lock` 과 같습니다.
-> `block youtube` 처럼 on/off 없이 쓰면 무엇을 뜻하는지 되묻습니다.
+> **`block` 과 `lock` 은 다릅니다.**
+> `block youtube` 는 차단 정책을 켜는 것이고, `lock youtube` 는 지금 걸려 있는
+> 일시 허용을 취소하는 것입니다. 자세한 차이는 아래 "lock" 항목을 보세요.
+>
+> 이전 버전에서 `block all` 은 `lock` 의 별칭이었지만, `block youtube` 와 뜻이
+> 어긋나서 "전부 막는다" 로 통일했습니다. 기존 기능은 `lock` 이 그대로 합니다.
 
 **켜고 끄는 것은 "차단 기능" 이지 사이트가 아닙니다.**
 

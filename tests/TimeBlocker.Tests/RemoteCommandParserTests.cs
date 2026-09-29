@@ -108,65 +108,77 @@ public class RemoteCommandParserTests
         Assert.Equal(expected, command.Target);
     }
 
-    [Theory]
-    [InlineData("block all")]
-    [InlineData("lock all")]
-    public void BlockAll_IsSameAsLock(string input)
+    [Fact]
+    public void LockAll_CancelsPermits()
     {
-        var command = _sut.Parse(input);
+        var command = _sut.Parse("lock all");
 
         Assert.Equal(RemoteCommandType.Lock, command.Type);
         Assert.Null(command.Target);
     }
 
-    // ------------------------------------------------- block <대상> on/off
+    // -------------------------------------------------- block / unblock
 
     [Theory]
-    [InlineData("block youtube on", RemoteCommandType.EnableTarget, BlockTarget.YouTube)]
-    [InlineData("block youtube off", RemoteCommandType.DisableTarget, BlockTarget.YouTube)]
-    [InlineData("block roblox on", RemoteCommandType.EnableTarget, BlockTarget.Roblox)]
-    [InlineData("block rb off", RemoteCommandType.DisableTarget, BlockTarget.Roblox)]
-    [InlineData("BLOCK YouTube ON", RemoteCommandType.EnableTarget, BlockTarget.YouTube)]
-    public void BlockTargetOnOff_SetsBlockingPolicy(
+    [InlineData("block youtube", RemoteCommandType.EnableTarget, BlockTarget.YouTube)]
+    [InlineData("unblock youtube", RemoteCommandType.DisableTarget, BlockTarget.YouTube)]
+    [InlineData("block roblox", RemoteCommandType.EnableTarget, BlockTarget.Roblox)]
+    [InlineData("unblock rb", RemoteCommandType.DisableTarget, BlockTarget.Roblox)]
+    [InlineData("BLOCK YouTube", RemoteCommandType.EnableTarget, BlockTarget.YouTube)]
+    [InlineData("/unblock youtube", RemoteCommandType.DisableTarget, BlockTarget.YouTube)]
+    public void BlockUnblock_SetsBlockingPolicy(
         string input, RemoteCommandType expectedType, BlockTarget expectedTarget)
     {
-        // enable/disable 이 "유튜브를 켠다/끈다" 로 읽히는 문제 때문에 추가한 형태.
+        // enable/disable 이 "유튜브를 켠다/끈다" 로 읽히는 문제 때문에 도입한 형태.
         var command = _sut.Parse(input);
 
         Assert.Equal(expectedType, command.Type);
         Assert.Equal(expectedTarget, command.Target);
     }
 
-    [Fact]
-    public void BlockTarget_WithoutOnOff_AsksToBeExplicit()
+    [Theory]
+    [InlineData("block all", RemoteCommandType.EnableTarget)]
+    [InlineData("unblock all", RemoteCommandType.DisableTarget)]
+    public void BlockUnblockAll_AppliesToEveryTarget(string input, RemoteCommandType expectedType)
     {
-        // 예전에는 조용히 "일시 허용 취소(lock)" 로 처리됐는데,
-        // 사용자는 "차단을 켠다" 는 뜻으로 쓸 가능성이 높아 확인을 요구한다.
-        var command = _sut.Parse("block youtube");
+        // "block all" 은 예전에 lock(일시 허용 취소) 의 별칭이었으나,
+        // "block youtube" 와 뜻이 어긋나서 "전부 막는다" 로 통일했다.
+        var command = _sut.Parse(input);
 
-        Assert.Equal(RemoteCommandType.Unknown, command.Type);
-        Assert.Contains("block youtube on", command.Error);
-        Assert.Contains("block youtube off", command.Error);
-        Assert.Contains("lock youtube", command.Error);
+        Assert.Equal(expectedType, command.Type);
+        Assert.Equal(BlockTarget.All, command.Target);
+    }
+
+    [Theory]
+    [InlineData("block youtube on", RemoteCommandType.EnableTarget)]
+    [InlineData("block youtube off", RemoteCommandType.DisableTarget)]
+    public void BlockWithOnOff_StillAccepted(string input, RemoteCommandType expectedType)
+    {
+        Assert.Equal(expectedType, _sut.Parse(input).Type);
     }
 
     [Fact]
-    public void BlockTarget_WithBadState_IsRejected()
+    public void Block_WithoutTarget_ReturnsUsage()
     {
-        var command = _sut.Parse("block youtube maybe");
+        var command = _sut.Parse("block");
 
         Assert.Equal(RemoteCommandType.Unknown, command.Type);
-        Assert.Contains("on 또는 off", command.Error);
+        Assert.Contains("block youtube", command.Error);
+        Assert.Contains("lock", command.Error);
     }
 
     [Fact]
-    public void BlockAll_StillMeansCancelPermits()
+    public void Block_WithBadValue_IsRejected()
     {
-        // "block all" 은 기존 의미(일시 허용 전부 취소)를 유지한다.
-        var command = _sut.Parse("block all");
+        Assert.Equal(RemoteCommandType.Unknown, _sut.Parse("block youtube maybe").Type);
+    }
 
-        Assert.Equal(RemoteCommandType.Lock, command.Type);
-        Assert.Null(command.Target);
+    [Fact]
+    public void Lock_IsStillSeparateFromBlock()
+    {
+        // lock 은 "일시 허용 취소" 로 block 과 다른 개념이다.
+        Assert.Equal(RemoteCommandType.Lock, _sut.Parse("lock").Type);
+        Assert.Equal(RemoteCommandType.Lock, _sut.Parse("lock youtube").Type);
     }
 
     // -------------------------------------------------------- enable/disable
@@ -186,7 +198,6 @@ public class RemoteCommandParserTests
 
     [Theory]
     [InlineData("enable")]
-    [InlineData("enable all")]      // all 은 대상이 아니다
     [InlineData("disable bogus")]
     public void InvalidEnableDisable_ReturnsUsage(string input)
     {
