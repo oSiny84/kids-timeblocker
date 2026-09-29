@@ -44,7 +44,9 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
             "ping" => Simple(RemoteCommandType.Ping, raw),
             "version" or "ver" => Simple(RemoteCommandType.Version, raw),
             "reload" => Simple(RemoteCommandType.Reload, raw),
-            "help" or "h" or "start" or "?" => Simple(RemoteCommandType.Help, raw),
+            // 명령 목록을 찾을 때 사람마다 떠올리는 단어가 다르다. 전부 help 로 받는다.
+            "help" or "h" or "start" or "?" or "list" or "commands" or "command" or "cmd" or "menu"
+                => Simple(RemoteCommandType.Help, raw),
             "doctor" or "diag" or "healthcheck" => Simple(RemoteCommandType.Doctor, raw),
 
             "schedule" or "sch" => ParseSchedule(raw, args),
