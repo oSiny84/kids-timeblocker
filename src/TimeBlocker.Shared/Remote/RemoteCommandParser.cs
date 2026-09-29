@@ -1,4 +1,4 @@
-using TimeBlocker.Shared.Models;
+﻿using TimeBlocker.Shared.Models;
 
 namespace TimeBlocker.Shared.Remote;
 
@@ -50,11 +50,15 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
             "doctor" or "diag" or "healthcheck" => Simple(RemoteCommandType.Doctor, raw),
 
             "schedule" or "sch" => ParseSchedule(raw, args),
-            "lock" => ParseLock(raw, args),
-            "block" => ParseBlock(raw, args, block: true),
-            "unblock" => ParseBlock(raw, args, block: false),
-            "enable" => ParseEnableDisable(raw, args, enable: true),
-            "disable" => ParseEnableDisable(raw, args, enable: false),
+
+            // 상태 3종. 어떤 명령을 쳐도 대상의 상태가 정확히 하나로 정해진다.
+            "block" or "lock" => ParseSetMode(raw, args, BlockMode.Blocked),
+            "unblock" or "unlock" or "open" => ParseSetMode(raw, args, BlockMode.Open),
+            "auto" or "normal" => ParseSetMode(raw, args, BlockMode.Schedule),
+
+            // 1.1 이하 호환. enable=스케줄대로, disable=항상 열림 이었다.
+            "enable" => ParseSetMode(raw, args, BlockMode.Schedule),
+            "disable" => ParseSetMode(raw, args, BlockMode.Open),
             "domains" or "domain" => ParseDomain(raw, head, args),
             "maxpermit" or "max" => ParseMaxPermit(raw, args),
             "admin" => ParseAdmin(raw, args),
@@ -103,56 +107,28 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
         };
     }
 
-    // ------------------------------------------------------------------ lock
-
-    /// <summary>"lock", "lock youtube".</summary>
-    private static RemoteCommand ParseLock(string raw, string[] args)
-    {
-        if (args.Length == 0)
-        {
-            return new RemoteCommand { Type = RemoteCommandType.Lock, Target = null, RawText = raw };
-        }
-
-        if (!TryParseTarget(args[0], out var target))
-        {
-            return RemoteCommand.Invalid(raw,
-                $"ERROR\nUnknown target: {args[0]}\n\nUsage:\nlock\nlock youtube\nlock roblox");
-        }
-
-        // "lock all" 은 전체 취소와 같다.
-        return new RemoteCommand
-        {
-            Type = RemoteCommandType.Lock,
-            Target = target == BlockTarget.All ? null : target,
-            RawText = raw
-        };
-    }
+    // ------------------------------------------------------------------- 상태
 
     /// <summary>
-    /// block / unblock 계열 명령. 읽는 그대로의 뜻이다.
+    /// 대상의 상태를 바꾼다. 상태는 항상 셋 중 하나다.
     ///
-    ///   block youtube      YouTube 를 막는다      (= enable youtube)
-    ///   unblock youtube    YouTube 를 안 막는다   (= disable youtube)
-    ///   block all          모든 대상을 막는다
-    ///   unblock all        모든 대상을 안 막는다
+    ///   block youtube      YouTube 를 계속 막는다 (스케줄 무시)
+    ///   unblock youtube    YouTube 를 계속 열어둔다 (스케줄 무시)
+    ///   auto youtube       스케줄대로 돌려놓는다
     ///
-    /// enable/disable 은 "유튜브를 켠다/끈다" 로 읽혀 뜻이 정반대로 이해되기 쉽다.
-    /// on/off 를 덧붙인 형태(block youtube on)도 계속 받는다.
-    ///
-    /// 주의: 일시 허용을 취소하는 것은 lock 이다. block 과는 다른 개념이다.
-    ///   block youtube   = 차단 정책을 켠다 (스케줄이 맞으면 막힌다)
-    ///   lock youtube    = 지금 걸려 있는 일시 허용만 취소한다
+    /// 대상을 생략하면 전체에 적용한다. ("block" = "block all")
+    /// 예전 lock / enable / disable 도 같은 경로로 받는다.
     /// </summary>
-    private static RemoteCommand ParseBlock(string raw, string[] args, bool block)
+    private static RemoteCommand ParseSetMode(string raw, string[] args, BlockMode mode)
     {
-        var verb = block ? "block" : "unblock";
-        var usage =
-            $"Usage:\n{verb} youtube\n{verb} roblox\n{verb} all\n\n" +
-            "일시 허용만 취소하려면: lock / lock youtube";
+        const string usage =
+            "Usage:\nblock youtube      계속 막기\nunblock youtube    계속 열기\nauto youtube       스케줄대로\n\n" +
+            "대상: youtube / roblox / all";
 
+        // 대상을 안 적으면 전체로 본다. 응답에 무엇이 바뀌었는지 그대로 적는다.
         if (args.Length == 0)
         {
-            return RemoteCommand.Invalid(raw, $"ERROR\n대상을 지정하세요.\n\n{usage}");
+            return new RemoteCommand { Type = RemoteCommandType.SetMode, Target = BlockTarget.All, Mode = mode, RawText = raw };
         }
 
         if (!TryParseTarget(args[0], out var target))
@@ -160,52 +136,23 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
             return RemoteCommand.Invalid(raw, $"ERROR\nUnknown target: {args[0]}\n\n{usage}");
         }
 
-        // "block youtube on" / "block youtube off" 형태도 계속 받아준다.
-        var enable = block;
+        // "block youtube on" / "block youtube off" 같은 옛 형태도 계속 받아준다.
         if (args.Length >= 2)
         {
             switch (args[1].ToLowerInvariant())
             {
-                case "on": enable = true; break;
-                case "off": enable = false; break;
+                case "on":
+                    break;
+                case "off":
+                    // "block youtube off" 는 막지 말라는 뜻이므로 반대 상태가 된다.
+                    mode = mode == BlockMode.Blocked ? BlockMode.Open : BlockMode.Blocked;
+                    break;
                 default:
-                    return RemoteCommand.Invalid(raw,
-                        $"ERROR\n알 수 없는 값입니다: {args[1]}\n\n{usage}");
+                    return RemoteCommand.Invalid(raw, $"ERROR\n알 수 없는 값입니다: {args[1]}\n\n{usage}");
             }
         }
 
-        return new RemoteCommand
-        {
-            Type = enable ? RemoteCommandType.EnableTarget : RemoteCommandType.DisableTarget,
-            Target = target,
-            RawText = raw
-        };
-    }
-
-    // ---------------------------------------------------------- enable/disable
-
-    private static RemoteCommand ParseEnableDisable(string raw, string[] args, bool enable)
-    {
-        var verb = enable ? "enable" : "disable";
-        var usage = $"Usage:\n{verb} youtube\n{verb} roblox\n{verb} all";
-
-        if (args.Length == 0)
-        {
-            return RemoteCommand.Invalid(raw, $"ERROR\nTarget required.\n\n{usage}");
-        }
-
-        // all 도 받는다. block/unblock 과 동작을 맞추기 위함이다.
-        if (!TryParseTarget(args[0], out var target))
-        {
-            return RemoteCommand.Invalid(raw, $"ERROR\nUnknown target: {args[0]}\n\n{usage}");
-        }
-
-        return new RemoteCommand
-        {
-            Type = enable ? RemoteCommandType.EnableTarget : RemoteCommandType.DisableTarget,
-            Target = target,
-            RawText = raw
-        };
+        return new RemoteCommand { Type = RemoteCommandType.SetMode, Target = target, Mode = mode, RawText = raw };
     }
 
     // ---------------------------------------------------------------- domains

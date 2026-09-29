@@ -68,7 +68,27 @@ public sealed class DnsSettings
 /// <summary>차단 대상 1개의 설정.</summary>
 public sealed class TargetSettings
 {
-    public bool Enabled { get; set; } = true;
+    /// <summary>이 대상의 상태. 기본은 스케줄대로.</summary>
+    public BlockMode Mode { get; set; } = BlockMode.Schedule;
+
+    /// <summary>
+    /// 1.1 이하 설정파일 호환용. 새로 저장할 때는 기록하지 않는다.
+    /// 값이 있으면 설정을 읽은 직후 Mode 로 옮기고 지운다. (MigrateLegacyTargetModes)
+    /// </summary>
+    public bool? Enabled { get; set; }
+
+    /// <summary>Mode 가 없는 구버전 설정을 읽었을 때 한 번만 변환한다.</summary>
+    internal bool MigrateLegacyMode()
+    {
+        if (Enabled is null) return false;
+
+        // Enabled=false 는 "차단하지 않음" 이었으므로 항상 열림에 해당한다.
+        // Enabled=true 는 스케줄대로였다. Mode 가 이미 명시돼 있으면 그쪽을 존중한다.
+        if (Mode == BlockMode.Schedule && Enabled == false) Mode = BlockMode.Open;
+
+        Enabled = null;
+        return true;
+    }
 
     /// <summary>차단할 도메인 목록. 코드에 하드코딩하지 않고 여기서 관리한다.</summary>
     public List<string> Domains { get; set; } = new();
@@ -248,6 +268,10 @@ public sealed class TimeBlockerConfig
         Roblox.Domains ??= new List<string>();
         Roblox.ProcessNames ??= new List<string>();
         Roblox.ExtraExecutablePaths ??= new List<string>();
+
+        // 1.1 이하에서 올라온 설정파일의 Enabled 를 Mode 로 옮긴다.
+        YouTube.MigrateLegacyMode();
+        Roblox.MigrateLegacyMode();
 
         TemporaryPermit ??= new TemporaryPermitSettings();
         if (TemporaryPermit.MaxMinutes <= 0) TemporaryPermit.MaxMinutes = 120;

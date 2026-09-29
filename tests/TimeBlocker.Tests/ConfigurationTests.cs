@@ -118,4 +118,45 @@ public class ConfigurationTests : IDisposable
         var config = TimeBlockerConfig.CreateDefault();
         Assert.Throws<ArgumentOutOfRangeException>(() => config.GetTarget(BlockTarget.All));
     }
+
+    // -------------------------------------------------- 1.1 이하 설정 호환
+
+    [Theory]
+    [InlineData(false, BlockMode.Open)]      // 차단 안 함 -> 항상 열림
+    [InlineData(true, BlockMode.Schedule)]   // 차단 함     -> 스케줄대로
+    public void LegacyEnabledField_IsMigratedToMode(bool legacyEnabled, BlockMode expected)
+    {
+        // 아들 PC 처럼 이미 1.1 로 돌던 설정이 그대로 읽혀야 한다.
+        var json = $$"""
+                     {
+                       "YouTube": { "Enabled": {{(legacyEnabled ? "true" : "false")}}, "Domains": ["youtube.com"] },
+                       "Roblox":  { "Enabled": {{(legacyEnabled ? "true" : "false")}}, "Domains": ["roblox.com"] }
+                     }
+                     """;
+        File.WriteAllText(ConfigPath, json);
+
+        var store = new JsonConfigurationStore(ConfigPath);
+
+        Assert.Equal(expected, store.Current.YouTube.Mode);
+        Assert.Equal(expected, store.Current.Roblox.Mode);
+
+        // 도메인 같은 나머지 설정은 그대로 살아 있어야 한다.
+        Assert.Contains("youtube.com", store.Current.YouTube.Domains);
+    }
+
+    [Fact]
+    public void LegacyEnabledField_IsNotWrittenBackOnSave()
+    {
+        File.WriteAllText(ConfigPath, """{ "YouTube": { "Enabled": false } }""");
+
+        var store = new JsonConfigurationStore(ConfigPath);
+        store.Save(store.Current);
+
+        // 한 번 변환한 뒤에는 옛 필드가 남아 혼란을 주면 안 된다.
+        // (요일 설정에도 Enabled 가 있으므로 대상 설정만 다시 읽어 확인한다)
+        var reopened = new JsonConfigurationStore(ConfigPath);
+        Assert.Null(reopened.Current.YouTube.Enabled);
+        Assert.Equal(BlockMode.Open, reopened.Current.YouTube.Mode);
+        Assert.Contains("\"Mode\": \"Open\"", File.ReadAllText(ConfigPath));
+    }
 }

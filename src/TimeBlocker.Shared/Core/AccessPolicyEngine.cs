@@ -17,10 +17,15 @@ public interface IAccessPolicyEngine
 /// DNS / 방화벽 / GUI / Telegram 은 각자 판단하지 않고 반드시 여기 결과만 쓴다.
 ///
 /// 판정 우선순위:
-///   1. 대상 차단이 꺼져 있음            -> ALLOW (TargetDisabled)
+///   1. Mode=Open   (unblock)            -> ALLOW (AlwaysOpen)
 ///   2. 일시 허용이 살아 있음            -> ALLOW (TemporaryPermit)
-///   3. 현재 시각이 차단 스케줄 안       -> BLOCK (InBlockingSchedule)
-///   4. 그 외                            -> ALLOW (OutsideSchedule)
+///   3. Mode=Blocked (block)             -> BLOCK (AlwaysBlocked)
+///   4. 현재 시각이 차단 스케줄 안       -> BLOCK (InBlockingSchedule)
+///   5. 그 외                            -> ALLOW (OutsideSchedule)
+///
+/// 일시 허용을 Blocked 보다 위에 두는 이유:
+/// block 으로 잠가둔 상태에서도 "30분만 열어줘" 가 되어야 하기 때문이다.
+/// 반대로 block 명령 자체는 그 대상의 일시 허용을 취소하므로 즉시 막힌다.
 /// </summary>
 public sealed class AccessPolicyEngine : IAccessPolicyEngine
 {
@@ -52,15 +57,16 @@ public sealed class AccessPolicyEngine : IAccessPolicyEngine
         var localNow = _clock.LocalNow;
         var scheduleText = _scheduleManager.Describe(config.Schedule, localNow);
 
-        // 1. 대상 자체가 꺼져 있으면 항상 허용
+        // 1. 항상 열어두도록 설정된 대상은 스케줄을 보지 않는다.
         var targetSettings = config.GetTarget(target);
-        if (!targetSettings.Enabled)
+        if (targetSettings.Mode == BlockMode.Open)
         {
             return new AccessDecision
             {
                 Target = target,
                 IsBlocked = false,
-                Reason = AccessReason.TargetDisabled,
+                Reason = AccessReason.AlwaysOpen,
+                Mode = targetSettings.Mode,
                 ScheduleDescription = scheduleText
             };
         }
@@ -75,11 +81,25 @@ public sealed class AccessPolicyEngine : IAccessPolicyEngine
                 IsBlocked = false,
                 Reason = AccessReason.TemporaryPermit,
                 PermitExpiresUtc = permit.ExpireTimeUtc,
+                Mode = targetSettings.Mode,
                 ScheduleDescription = scheduleText
             };
         }
 
-        // 3. 차단 시간대면 차단
+        // 3. 항상 막도록 설정돼 있으면 스케줄과 무관하게 차단
+        if (targetSettings.Mode == BlockMode.Blocked)
+        {
+            return new AccessDecision
+            {
+                Target = target,
+                IsBlocked = true,
+                Reason = AccessReason.AlwaysBlocked,
+                Mode = targetSettings.Mode,
+                ScheduleDescription = scheduleText
+            };
+        }
+
+        // 4. 차단 시간대면 차단
         if (_scheduleManager.IsWithinBlockingWindow(config.Schedule, localNow))
         {
             return new AccessDecision
@@ -87,16 +107,18 @@ public sealed class AccessPolicyEngine : IAccessPolicyEngine
                 Target = target,
                 IsBlocked = true,
                 Reason = AccessReason.InBlockingSchedule,
+                Mode = targetSettings.Mode,
                 ScheduleDescription = scheduleText
             };
         }
 
-        // 4. 그 외에는 허용
+        // 5. 그 외에는 허용
         return new AccessDecision
         {
             Target = target,
             IsBlocked = false,
             Reason = AccessReason.OutsideSchedule,
+            Mode = targetSettings.Mode,
             ScheduleDescription = scheduleText
         };
     }

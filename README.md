@@ -387,7 +387,7 @@ $env:TIMEBLOCKER_DATA = "D:\temp\tbdata"
 | 명령 | 별칭 | 설명 |
 |---|---|---|
 | `status` | `s` | 전체 상태 |
-| `targets` | | 대상별 차단 ON / OFF |
+| `targets` | | 대상별 상태 (auto / block / unblock) |
 | `schedule` | `sch` | 요일별 차단 시간 |
 | `domains youtube` | | 차단 도메인 목록 |
 | `maxpermit` | | 최대 허용 시간 |
@@ -416,16 +416,6 @@ Expire : 21:45
 
 허용 시간이 끝나면 **별도 조작 없이 자동으로 다시 차단**됩니다.
 
-### 즉시 재차단
-
-```
-lock            모든 일시 허용 취소 (block all 과 동일)
-lock youtube    YouTube 허용만 취소
-lock roblox     Roblox 허용만 취소
-```
-
-`all 60` 상태에서 `lock youtube` 를 하면 YouTube 만 차단되고 Roblox 는 남은 시간 동안 허용이 유지됩니다.
-
 ### 스케줄 변경
 
 ```
@@ -440,48 +430,66 @@ schedule default 21:00 07:00     전체 요일 기본값
 
 시간은 `21:00` 또는 `2100` 형식을 모두 받습니다.
 
-### 차단 대상 ON/OFF
+### 대상 상태 — block / unblock / auto
 
-```
-block youtube       YouTube 를 막는다
-unblock youtube     YouTube 를 안 막는다 (항상 열어둠)
-block roblox
-unblock roblox
-block all           전부 막는다
-unblock all         전부 안 막는다
-```
+대상마다 상태는 **항상 셋 중 정확히 하나**입니다.
 
-`enable youtube` / `disable youtube` 도 같은 뜻이지만, **"유튜브를 켠다/끈다" 로 읽히기 쉬워
-`block ... on/off` 를 권합니다.** 켜고 꺼지는 것은 사이트가 아니라 "차단 기능" 입니다.
+| 상태 | 명령 | 의미 |
+|---|---|---|
+| 스케줄 (기본값) | `auto youtube` | 스케줄 차단 시간대에만 막힘 |
+| 잠금 | `block youtube` | 스케줄과 무관하게 계속 막힘 |
+| 열림 | `unblock youtube` | 스케줄과 무관하게 계속 열림 |
 
-> **`block` 과 `lock` 은 다릅니다.**
-> `block youtube` 는 차단 정책을 켜는 것이고, `lock youtube` 는 지금 걸려 있는
-> 일시 허용을 취소하는 것입니다. 자세한 차이는 아래 "lock" 항목을 보세요.
->
-> 이전 버전에서 `block all` 은 `lock` 의 별칭이었지만, `block youtube` 와 뜻이
-> 어긋나서 "전부 막는다" 로 통일했습니다. 기존 기능은 `lock` 이 그대로 합니다.
-
-**켜고 끄는 것은 "차단 기능" 이지 사이트가 아닙니다.**
-
-- `enable youtube` → YouTube 를 **차단합니다** (스케줄에 따라)
-- `disable youtube` → YouTube 를 **차단하지 않습니다** (항상 열림)
+대상은 `youtube` / `roblox` / `all` 입니다. 대상을 생략하면 전체에 적용됩니다
+(`block` = `block all`).
 
 `targets` 로 확인하면 이렇게 보입니다.
 
 ```
-YouTube : 차단 ON   (스케줄대로 차단)
-Roblox  : 차단 OFF  (차단하지 않음)
+YouTube : block   잠금 (항상 막음)
+Roblox  : auto    자동 (스케줄대로)
 ```
 
-차단이 꺼진 대상은 `status` 에도 `OFF (차단 안 함)` 으로 표시되고,
-켜는 명령을 함께 안내합니다.
+`status` 는 결과와 이유를 같이 보여줍니다.
 
-> **판정 우선순위상 차단 OFF 가 가장 앞섭니다.**
-> 스케줄이 차단 시간대여도, 일시 허용이 없어도, 차단 OFF 인 대상은 열립니다.
-> "스케줄을 맞췄는데 왜 안 막히지?" 의 원인이 대부분 이것입니다.
+```
+YouTube     : BLOCKED (block · 항상 막음)
+Roblox      : ALLOW   (auto · 지금은 차단 시간 아님)
+```
 
-일시 허용(`youtube 30`)과는 다른 개념이며 내부적으로도 분리되어 있습니다.
-일시 허용은 "지금만 잠깐 열기", 차단 OFF 는 "아예 관리 대상에서 빼기" 입니다.
+**상태를 바꾸면 그 대상의 일시 허용도 함께 취소됩니다.** 일시 허용은 스케줄을
+덮어쓰는 예외라서, 그대로 두면 방금 내린 명령이 먹지 않는 것처럼 보이기 때문입니다.
+
+> **`block` 은 즉시 잠그고, `auto` 는 스케줄에 맡깁니다.**
+> "스케줄을 맞췄는데 왜 안 막히지?" 의 원인은 대부분 그 대상이 `unblock` 상태인 것입니다.
+> `status` 가 그 경우 `auto <대상>` 안내를 함께 출력합니다.
+
+#### 일시 허용과의 관계
+
+`youtube 30` 같은 일시 허용은 상태와 별개로 **"지금만 잠깐 열기"** 입니다.
+`block` 으로 잠가둔 상태에서도 일시 허용은 동작하며, 시간이 끝나면 원래 상태로
+돌아갑니다.
+
+판정 우선순위:
+
+1. `unblock` → 항상 열림
+2. 일시 허용이 살아 있음 → 열림
+3. `block` → 항상 막힘
+4. 스케줄 차단 시간대 → 막힘
+5. 그 외 → 열림
+
+#### 옛 명령 호환
+
+1.1 이하에서 쓰던 명령도 그대로 받습니다.
+
+| 옛 명령 | 지금 의미 |
+|---|---|
+| `lock youtube` | `block youtube` |
+| `enable youtube` | `auto youtube` |
+| `disable youtube` | `unblock youtube` |
+
+설정파일의 `Enabled` 필드도 처음 읽을 때 자동으로 `Mode` 로 변환되므로,
+기존 설치본을 그대로 덮어써도 설정이 유지됩니다.
 
 ### 도메인 관리
 
@@ -1043,7 +1051,7 @@ dotnet test tests\TimeBlocker.Tests\TimeBlocker.Tests.csproj
 | 2 | `schedule mon-thu 21:00 07:00` | `OK` + 월~목이 `21:00-07:00` 으로 바뀐 목록 |
 | 3 | `youtube 30` | `OK` + `YouTube allowed for 30 minutes.` + Start / Expire 시각 |
 | 4 | `status` | `YouTube : ALLOW`, `Temporary Permit:` 에 `YouTube until HH:mm (30 min left)` |
-| 5 | `lock youtube` | `OK` + `YouTube temporary permit cancelled.` + 현재 상태 |
+| 5 | `block youtube` | `OK` + 일시 허용 취소 안내 + 현재 상태 |
 | 6 | `status` | `Temporary Permit: None`. 차단 시간대라면 `YouTube : BLOCKED` |
 
 > 3~6 번에서 상태 변화를 눈으로 확인하려면 **차단 시간대 안에서** 테스트하세요.
@@ -1309,7 +1317,7 @@ TimeBlocker.Admin.exe status
 TimeBlocker.Admin.exe schedule mon-thu 21:00 07:00
 TimeBlocker.Admin.exe youtube 30
 TimeBlocker.Admin.exe status
-TimeBlocker.Admin.exe lock youtube
+TimeBlocker.Admin.exe block youtube
 TimeBlocker.Admin.exe status
 ```
 

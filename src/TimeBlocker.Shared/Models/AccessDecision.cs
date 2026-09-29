@@ -3,11 +3,14 @@ namespace TimeBlocker.Shared.Models;
 /// <summary>차단 여부가 그렇게 결정된 이유.</summary>
 public enum AccessReason
 {
-    /// <summary>설정에서 해당 대상 차단이 꺼져 있음.</summary>
-    TargetDisabled,
+    /// <summary>항상 열어두도록 설정됨 (unblock).</summary>
+    AlwaysOpen,
 
     /// <summary>일시 허용이 활성 상태.</summary>
     TemporaryPermit,
+
+    /// <summary>항상 막도록 설정됨 (block). 스케줄과 무관하다.</summary>
+    AlwaysBlocked,
 
     /// <summary>현재 시각이 차단 스케줄 안.</summary>
     InBlockingSchedule,
@@ -27,6 +30,9 @@ public sealed class AccessDecision
     public bool IsBlocked { get; init; }
 
     public AccessReason Reason { get; init; }
+
+    /// <summary>판정 당시 이 대상의 상태(auto / block / unblock).</summary>
+    public BlockMode Mode { get; init; } = BlockMode.Schedule;
 
     /// <summary>일시 허용으로 인해 열린 경우 그 만료 시각(UTC).</summary>
     public DateTimeOffset? PermitExpiresUtc { get; init; }

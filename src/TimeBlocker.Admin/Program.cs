@@ -1,4 +1,4 @@
-using System.Security.Principal;
+﻿using System.Security.Principal;
 using TimeBlocker.Shared.Ipc;
 
 namespace TimeBlocker.Admin;
@@ -122,19 +122,20 @@ public static class Program
               TimeBlocker.Admin.exe version
               TimeBlocker.Admin.exe logs 100
 
-            일시 허용 / 차단
+            상태 (대상마다 셋 중 하나)
+              TimeBlocker.Admin.exe block youtube     계속 막는다
+              TimeBlocker.Admin.exe unblock youtube   계속 열어둔다
+              TimeBlocker.Admin.exe auto youtube      스케줄대로 (기본값)
+
+            일시 허용 (지금만 잠깐 열기)
               TimeBlocker.Admin.exe youtube 30
               TimeBlocker.Admin.exe roblox 60
               TimeBlocker.Admin.exe all 20
-              TimeBlocker.Admin.exe lock
-              TimeBlocker.Admin.exe lock youtube
 
             설정
               TimeBlocker.Admin.exe schedule mon 21:00 07:00
               TimeBlocker.Admin.exe schedule mon-thu 21:00 07:00
               TimeBlocker.Admin.exe schedule sat off
-              TimeBlocker.Admin.exe enable youtube
-              TimeBlocker.Admin.exe disable roblox
               TimeBlocker.Admin.exe maxpermit 120
               TimeBlocker.Admin.exe reload
 

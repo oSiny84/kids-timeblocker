@@ -62,19 +62,50 @@ public class AccessPolicyEngineTests
     }
 
     [Fact]
-    public void DisabledTarget_BeatsSchedule()
+    public void OpenMode_BeatsSchedule()
     {
         var h = CreateHarness(At(23, 0));
-        h.Config.YouTube.Enabled = false;
+        h.Config.YouTube.Mode = BlockMode.Open;
 
         var youtube = h.Engine.Evaluate(BlockTarget.YouTube);
         var roblox = h.Engine.Evaluate(BlockTarget.Roblox);
 
         Assert.False(youtube.IsBlocked);
-        Assert.Equal(AccessReason.TargetDisabled, youtube.Reason);
+        Assert.Equal(AccessReason.AlwaysOpen, youtube.Reason);
 
         // Roblox 는 그대로 차단되어야 한다.
         Assert.True(roblox.IsBlocked);
+    }
+
+    [Fact]
+    public void BlockedMode_BeatsSchedule()
+    {
+        // 차단 시간대가 아닌 낮 시간인데도 막혀야 한다.
+        var h = CreateHarness(At(15, 0));
+        h.Config.YouTube.Mode = BlockMode.Blocked;
+
+        var youtube = h.Engine.Evaluate(BlockTarget.YouTube);
+        var roblox = h.Engine.Evaluate(BlockTarget.Roblox);
+
+        Assert.True(youtube.IsBlocked);
+        Assert.Equal(AccessReason.AlwaysBlocked, youtube.Reason);
+
+        // 스케줄대로인 Roblox 는 낮에 열려 있어야 한다.
+        Assert.False(roblox.IsBlocked);
+    }
+
+    [Fact]
+    public void TemporaryPermit_BeatsBlockedMode()
+    {
+        // block 으로 잠가둔 상태에서도 "30분만 열어줘" 는 되어야 한다.
+        var h = CreateHarness(At(23, 0));
+        h.Config.YouTube.Mode = BlockMode.Blocked;
+        h.Permits.Grant(BlockTarget.YouTube, 30, "test");
+
+        var youtube = h.Engine.Evaluate(BlockTarget.YouTube);
+
+        Assert.False(youtube.IsBlocked);
+        Assert.Equal(AccessReason.TemporaryPermit, youtube.Reason);
     }
 
     [Fact]

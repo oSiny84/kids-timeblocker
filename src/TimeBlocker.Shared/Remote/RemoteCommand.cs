@@ -1,4 +1,4 @@
-using TimeBlocker.Shared.Models;
+﻿using TimeBlocker.Shared.Models;
 
 namespace TimeBlocker.Shared.Remote;
 
@@ -26,13 +26,13 @@ public enum RemoteCommandType
 
     // 일시 허용 / 차단
     Permit,
-    Lock,
+
+    /// <summary>대상의 상태를 auto / block / unblock 중 하나로 바꾼다.</summary>
+    SetMode,
 
     // 설정 변경
     SetSchedule,
     SetDefaultSchedule,
-    EnableTarget,
-    DisableTarget,
     AddDomain,
     RemoveDomain,
     SetMaxPermit,
@@ -50,8 +50,11 @@ public sealed class RemoteCommand
 {
     public RemoteCommandType Type { get; init; } = RemoteCommandType.Unknown;
 
-    /// <summary>Permit / Lock / Enable / Disable / Domain 명령의 대상. null 이면 전체.</summary>
+    /// <summary>Permit / SetMode / Domain 명령의 대상. null 이면 전체.</summary>
     public BlockTarget? Target { get; init; }
+
+    /// <summary>SetMode 로 바꿀 상태.</summary>
+    public BlockMode? Mode { get; init; }
 
     /// <summary>Permit 의 분.</summary>
     public int Minutes { get; init; }
@@ -84,8 +87,7 @@ public sealed class RemoteCommand
     public bool IsConfigChanging => Type is
         RemoteCommandType.SetSchedule or
         RemoteCommandType.SetDefaultSchedule or
-        RemoteCommandType.EnableTarget or
-        RemoteCommandType.DisableTarget or
+        RemoteCommandType.SetMode or
         RemoteCommandType.AddDomain or
         RemoteCommandType.RemoveDomain or
         RemoteCommandType.SetMaxPermit;

@@ -1,4 +1,4 @@
-using TimeBlocker.Shared.Common;
+﻿using TimeBlocker.Shared.Common;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Core;
 using TimeBlocker.Shared.Models;
@@ -116,14 +116,13 @@ public class RemoteCommandHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Targets_ShowsBlockingOnOff()
+    public async Task Targets_ShowsEachTargetsMode()
     {
         var response = await RunAsync("targets");
 
-        // "ENABLED/DISABLED" 는 "유튜브를 켠다/끈다" 로 오해하기 쉬워
-        // "차단 ON/OFF" 로 표시한다.
-        Assert.Contains("YouTube : 차단 ON", response);
-        Assert.Contains("Roblox  : 차단 ON", response);
+        // 상태는 auto / block / unblock 셋 중 하나로만 표시된다.
+        Assert.Contains("YouTube : auto", response);
+        Assert.Contains("Roblox  : auto", response);
         Assert.DoesNotContain("DISABLED", response);
     }
 
@@ -205,15 +204,15 @@ public class RemoteCommandHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Permit_OnDisabledTarget_IsRejected()
+    public async Task Permit_OnUnblockedTarget_IsRejected()
     {
-        await RunAsync("disable youtube");
+        await RunAsync("unblock youtube");
 
         var response = await RunAsync("youtube 30");
 
         Assert.StartsWith("ERROR", response);
-        Assert.Contains("차단이 꺼져 있어", response);
-        Assert.Contains("block youtube", response);
+        Assert.Contains("이미 항상 열려 있습니다", response);
+        Assert.Contains("auto youtube", response);
     }
 
     [Fact]
@@ -227,43 +226,115 @@ public class RemoteCommandHandlerTests : IDisposable
         Assert.Contains("youtube 30", response);
     }
 
-    // ------------------------------------------------------------------ lock
+    // ------------------------------------------- block / unblock / auto
 
     [Fact]
-    public async Task Lock_CancelsAllPermits()
+    public async Task Block_WithoutTarget_AppliesToEveryTarget()
     {
         await RunAsync("all 20");
 
-        var response = await RunAsync("lock");
+        var response = await RunAsync("block");
 
         Assert.StartsWith("OK", response);
-        Assert.Contains("All temporary permits cancelled.", response);
+        Assert.Contains("진행 중이던 일시 허용도 취소했습니다", response);
         Assert.Contains("YouTube : BLOCKED", response);
         Assert.Contains("Roblox  : BLOCKED", response);
     }
 
     [Fact]
-    public async Task LockTarget_CancelsOnlyThatTarget()
+    public async Task Block_CancelsThatTargetsPermitOnly()
     {
         await RunAsync("youtube 30");
         await RunAsync("roblox 30");
 
-        var response = await RunAsync("lock youtube");
+        var response = await RunAsync("block youtube");
 
-        Assert.Contains("YouTube temporary permit cancelled.", response);
         Assert.Contains("YouTube : BLOCKED", response);
         Assert.Contains("Roblox  : ALLOW", response);
     }
 
     [Fact]
-    public async Task LockTarget_AfterAllPermit_KeepsOtherTargetAllowed()
+    public async Task Block_AfterAllPermit_KeepsOtherTargetAllowed()
     {
         await RunAsync("all 60");
 
-        var response = await RunAsync("lock youtube");
+        var response = await RunAsync("block youtube");
 
         Assert.Contains("YouTube : BLOCKED", response);
         Assert.Contains("Roblox  : ALLOW", response);
+    }
+
+    [Fact]
+    public async Task Block_IgnoresSchedule()
+    {
+        // 차단 시간대가 아닌 낮 시간으로 옮긴다.
+        _clock.SetLocal(new DateTime(2026, 9, 22, 15, 0, 0, DateTimeKind.Local));
+
+        await RunAsync("block youtube");
+
+        var status = await RunAsync("status");
+        Assert.Contains("YouTube     : BLOCKED", status);
+        Assert.Contains("block · 항상 막음", status);
+
+        // 스케줄대로인 Roblox 는 낮에 열려 있어야 한다.
+        Assert.Contains("Roblox      : ALLOW", status);
+    }
+
+    [Fact]
+    public async Task Unblock_IgnoresSchedule()
+    {
+        await RunAsync("unblock youtube");
+
+        var status = await RunAsync("status");
+
+        Assert.Contains("YouTube     : ALLOW", status);
+        Assert.Contains("unblock · 항상 열어둠", status);
+        Assert.Contains("Roblox      : BLOCKED", status);
+
+        // 스케줄을 따르지 않는 상태임을 분명히 알려야 한다.
+        Assert.Contains("auto youtube", status);
+    }
+
+    [Fact]
+    public async Task Auto_ReturnsToSchedule()
+    {
+        await RunAsync("block youtube");
+        await RunAsync("auto youtube");
+
+        Assert.Equal(BlockMode.Schedule, _configStore.Current.YouTube.Mode);
+
+        // 차단 시간대라서 막힌다.
+        Assert.Contains("YouTube     : BLOCKED", await RunAsync("status"));
+
+        // 차단 시간대 밖으로 나가면 열린다.
+        _clock.SetLocal(new DateTime(2026, 9, 22, 15, 0, 0, DateTimeKind.Local));
+        Assert.Contains("YouTube     : ALLOW", await RunAsync("status"));
+    }
+
+    [Fact]
+    public async Task Permit_StillWorksWhileBlocked()
+    {
+        // block 으로 잠가둬도 "30분만 열어줘" 는 되어야 한다.
+        await RunAsync("block youtube");
+
+        Assert.Contains("YouTube allowed for 30 minutes.", await RunAsync("youtube 30"));
+        Assert.Contains("YouTube     : ALLOW", await RunAsync("status"));
+
+        // 허용이 끝나면 다시 잠긴 상태로 돌아간다.
+        _clock.SetLocal(new DateTime(2026, 9, 22, 21, 50, 0, DateTimeKind.Local));
+        Assert.Contains("YouTube     : BLOCKED", await RunAsync("status"));
+    }
+
+    [Fact]
+    public async Task ModeIsPersistedAcrossRestart()
+    {
+        await RunAsync("block youtube");
+        await RunAsync("unblock roblox");
+
+        var reopened = new JsonConfigurationStore(Path.Combine(_directory, "config.json"));
+
+        Assert.Equal(BlockMode.Blocked, reopened.Current.YouTube.Mode);
+        Assert.Equal(BlockMode.Open, reopened.Current.Roblox.Mode);
     }
 
     // -------------------------------------------------------------- 스케줄
@@ -340,89 +411,37 @@ public class RemoteCommandHandlerTests : IDisposable
         Assert.True(_enforcement.ApplyCount > before);
     }
 
-    // ------------------------------------------------------- 대상 ON/OFF
+    // ------------------------------------------------- 옛 명령 호환
 
     [Fact]
-    public async Task DisableTarget_RemovesItFromBlocking()
+    public async Task LegacyDisable_MeansUnblock()
     {
         var response = await RunAsync("disable youtube");
 
         Assert.StartsWith("OK", response);
-        Assert.Contains("차단을 껐습니다", response);
-        Assert.Contains("YouTube : 차단 OFF", response);
-        Assert.False(_configStore.Current.YouTube.Enabled);
-
-        var status = await RunAsync("status");
-        Assert.Contains("YouTube     : OFF (차단 안 함)", status);
-        Assert.Contains("Roblox      : BLOCKED", status);
-
-        // 왜 안 막히는지 status 안에서 바로 알 수 있어야 한다.
-        Assert.Contains("block youtube", status);
+        Assert.Equal(BlockMode.Open, _configStore.Current.YouTube.Mode);
+        Assert.Contains("YouTube     : ALLOW", await RunAsync("status"));
     }
 
     [Fact]
-    public async Task EnableTarget_RestoresBlocking()
+    public async Task LegacyEnable_MeansAuto()
     {
-        await RunAsync("disable roblox");
+        await RunAsync("unblock roblox");
         await RunAsync("enable roblox");
 
-        Assert.True(_configStore.Current.Roblox.Enabled);
+        Assert.Equal(BlockMode.Schedule, _configStore.Current.Roblox.Mode);
         Assert.Contains("Roblox      : BLOCKED", await RunAsync("status"));
     }
 
     [Fact]
-    public async Task Block_CancelsTemporaryPermitSoItTakesEffectNow()
-    {
-        // 일시 허용을 켜 두면 스케줄을 덮어써서 열린다.
-        await RunAsync("youtube 30");
-        Assert.Contains("YouTube     : ALLOW", await RunAsync("status"));
-
-        // "막아라" 라고 했으면 그 예외도 같이 치워야 명령이 먹는다.
-        var response = await RunAsync("block youtube");
-        Assert.StartsWith("OK", response);
-        Assert.Contains("진행 중이던 일시 허용도 취소했습니다", response);
-        Assert.Empty(_permits.GetActive());
-
-        // 지금은 차단 시간대(21:20)이므로 바로 막힌다.
-        Assert.Contains("YouTube     : BLOCKED", await RunAsync("status"));
-    }
-
-    [Fact]
-    public async Task Block_OutsideScheduleWindow_DoesNotLockImmediately()
+    public async Task LegacyLock_MeansBlock()
     {
         await RunAsync("youtube 30");
 
-        // 차단 시간대(21:00~07:00) 밖으로 이동한다.
-        _clock.SetLocal(new DateTime(2026, 9, 22, 15, 0, 0, DateTimeKind.Local));
+        var response = await RunAsync("lock youtube");
 
-        await RunAsync("block youtube");
-
-        // 일시 허용은 사라졌지만, 스케줄상 차단 시간이 아니므로 열려 있어야 한다.
-        Assert.Empty(_permits.GetActive());
-        Assert.Contains("YouTube     : ALLOW", await RunAsync("status"));
-    }
-
-    [Fact]
-    public async Task Block_OnlyCancelsThatTargetsPermit()
-    {
-        await RunAsync("all 30");
-
-        await RunAsync("block youtube");
-
-        Assert.Contains("YouTube     : BLOCKED", await RunAsync("status"));
-        Assert.Contains("Roblox      : ALLOW", await RunAsync("status"));
-    }
-
-    [Fact]
-    public async Task Unblock_LeavesPermitsAlone()
-    {
-        await RunAsync("youtube 30");
-
-        var response = await RunAsync("unblock youtube");
-
-        Assert.StartsWith("OK", response);
-        Assert.DoesNotContain("일시 허용도 취소", response);
-        Assert.NotEmpty(_permits.GetActive());
+        Assert.Equal(BlockMode.Blocked, _configStore.Current.YouTube.Mode);
+        Assert.Contains("YouTube : BLOCKED", response);
     }
 
     // ---------------------------------------------------------------- 도메인
@@ -538,8 +557,8 @@ public class RemoteCommandHandlerTests : IDisposable
         // 4. status -> 허용 상태
         Assert.Contains("YouTube     : ALLOW", await RunAsync("status"));
 
-        // 5. lock youtube
-        Assert.Contains("YouTube temporary permit cancelled.", await RunAsync("lock youtube"));
+        // 5. block youtube -> 일시 허용도 함께 취소된다
+        Assert.Contains("진행 중이던 일시 허용도 취소했습니다", await RunAsync("block youtube"));
 
         // 6. status -> 다시 차단
         Assert.Contains("YouTube     : BLOCKED", await RunAsync("status"));

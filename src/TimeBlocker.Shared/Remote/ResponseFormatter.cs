@@ -119,15 +119,21 @@ public static class ResponseFormatter
         targets
         schedule (sch)
 
-        [Temporary Allow]
+        [State] 대상마다 아래 셋 중 하나
+        block youtube     계속 막는다 (스케줄 무시)
+        unblock youtube   계속 열어둔다 (스케줄 무시)
+        auto youtube      스케줄대로 (기본값)
+
+        대상은 youtube / roblox / all.
+        대상을 빼면 전체에 적용된다. (block = block all)
+
+        [Temporary Allow] 지금만 잠깐 열어주기
         youtube <min>   (yt)
         roblox <min>    (rb)
         all <min>
 
-        [Block]
-        lock
-        lock youtube
-        lock roblox
+        시간이 지나면 원래 상태로 돌아간다.
+        block 상태여도 일시 허용은 먹는다.
 
         [Schedule]
         schedule mon 21:00 07:00
@@ -135,15 +141,6 @@ public static class ResponseFormatter
         schedule weekday 21:00 07:00
         schedule sat off
         schedule default 21:00 07:00
-
-        [Target] 무엇을 막을지
-        block youtube       YouTube 를 스케줄대로 막는다
-                            (일시 허용 중이면 같이 취소된다)
-        unblock youtube     YouTube 를 안 막는다 (항상 열어둠)
-        block roblox
-        unblock roblox
-        block all / unblock all
-        (enable / disable 도 같은 뜻)
 
         [Domains]
         domains youtube
@@ -164,6 +161,6 @@ public static class ResponseFormatter
         ping
         version
         doctor
-        help
+        help  (list / menu / ?)
         """;
 }

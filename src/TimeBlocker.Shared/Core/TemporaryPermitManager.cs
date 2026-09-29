@@ -1,4 +1,4 @@
-using TimeBlocker.Shared.Common;
+﻿using TimeBlocker.Shared.Common;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Models;
 
@@ -25,7 +25,7 @@ public interface ITemporaryPermitManager
     int CancelAll(string source);
 
     /// <summary>
-    /// 특정 대상의 일시 허용만 취소한다. (lock youtube)
+    /// 특정 대상의 일시 허용만 취소한다. (block / unblock / auto 가 호출한다)
     /// ALL 허용이 걸려 있으면 그 대상만 빠지도록 나머지 대상에 동일 만료의 개별 허용을 만들어 준다.
     /// </summary>
     int Cancel(BlockTarget target, string source);

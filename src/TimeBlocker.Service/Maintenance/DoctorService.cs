@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
@@ -364,12 +364,12 @@ public sealed class DoctorService : IDiagnosticsService
                 "domain add youtube <도메인> 으로 추가하세요.");
         }
 
-        // 대상 자체가 꺼져 있으면 해석되는 것이 당연하다.
+        // 항상 열어두도록 설정돼 있으면 해석되는 것이 당연하다.
         // 이 경우 "차단 시간대가 아님" 같은 엉뚱한 안내를 하면 원인을 못 찾는다.
-        if (!config.YouTube.Enabled)
+        if (config.YouTube.Mode == BlockMode.Open)
         {
-            return DoctorCheck.Warn(name, $"{domain} - YouTube 차단이 OFF 라 확인 불가",
-                "텔레그램에서 실행: block youtube");
+            return DoctorCheck.Warn(name, $"{domain} - YouTube 가 unblock 상태라 확인 불가",
+                "텔레그램에서 실행: auto youtube");
         }
 
         // 시스템 해석이 우리 경로를 거치지 않는 상태라면, 시스템 확인자로 물어봐야 의미가 없다.
@@ -418,31 +418,28 @@ public sealed class DoctorService : IDiagnosticsService
     {
         const string name = "Block targets";
 
-        var enabled = BlockTargets.Real
-            .Where(t => config.GetTarget(t).Enabled)
+        var open = BlockTargets.Real
+            .Where(t => config.GetTarget(t).Mode == BlockMode.Open)
             .Select(t => t.ToDisplayName())
             .ToList();
 
-        var disabled = BlockTargets.Real
-            .Where(t => !config.GetTarget(t).Enabled)
-            .Select(t => t.ToDisplayName())
-            .ToList();
-
-        if (disabled.Count == 0)
+        if (open.Count == 0)
         {
-            return DoctorCheck.Pass(name, string.Join(", ", enabled.Select(e => $"{e} 차단 ON")));
+            var summary = BlockTargets.Real
+                .Select(t => $"{t.ToDisplayName()} {config.GetTarget(t).Mode.ToCommandName()}");
+            return DoctorCheck.Pass(name, string.Join(", ", summary));
         }
 
-        var commands = string.Join(", ", disabled.Select(d => $"block {d.ToLowerInvariant()}"));
+        var commands = string.Join(", ", open.Select(d => $"auto {d.ToLowerInvariant()}"));
 
-        if (enabled.Count == 0)
+        if (open.Count == BlockTargets.Real.Length)
         {
-            return DoctorCheck.Fail(name, "모든 대상이 꺼져 있어 아무것도 차단되지 않습니다",
+            return DoctorCheck.Fail(name, "모든 대상이 unblock 상태라 아무것도 차단되지 않습니다",
                 $"텔레그램에서 실행: {commands}");
         }
 
         return DoctorCheck.Warn(name,
-            $"{string.Join(", ", disabled)} 차단 OFF (스케줄과 무관하게 열림)",
+            $"{string.Join(", ", open)} 가 unblock 상태 (스케줄과 무관하게 열림)",
             $"텔레그램에서 실행: {commands}");
     }
 
@@ -651,8 +648,8 @@ public sealed class DoctorService : IDiagnosticsService
             config.Normalize();
 
             var problems = new List<string>();
-            if (config.YouTube.Domains.Count == 0 && config.YouTube.Enabled) problems.Add("YouTube 도메인 없음");
-            if (config.Roblox.Domains.Count == 0 && config.Roblox.Enabled) problems.Add("Roblox 도메인 없음");
+            if (config.YouTube.Domains.Count == 0 && config.YouTube.Mode != BlockMode.Open) problems.Add("YouTube 도메인 없음");
+            if (config.Roblox.Domains.Count == 0 && config.Roblox.Mode != BlockMode.Open) problems.Add("Roblox 도메인 없음");
             if (config.Dns.UpstreamServers.Count == 0) problems.Add("상위 DNS 없음");
 
             if (File.Exists(path + ".broken"))

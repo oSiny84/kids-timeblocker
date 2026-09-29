@@ -80,6 +80,7 @@ $script:Results = @()
 $script:Aborted = $false
 $script:ScheduleChanged = $false
 $script:SavedSchedule = @()
+$script:SavedModes = @()
 
 function Add-Result([string]$Name, [bool]$Passed, [string]$Detail) {
     $script:Results += [pscustomobject]@{ Name = $Name; Passed = $Passed; Detail = $Detail }
@@ -153,6 +154,34 @@ function Get-CurrentSchedule {
     return $result
 }
 
+function Get-CurrentModes {
+    # "targets" 응답에서 대상별 상태(auto / block / unblock)를 읽어둔다.
+    #   YouTube : auto    자동 (스케줄대로)
+    $lines = (Invoke-TB 'targets') -split "`r?`n" | Where-Object { $_.Trim() }
+    $result = @()
+    foreach ($line in $lines) {
+        if ($line -match '^\s*(YouTube|Roblox)\s*:\s*(auto|block|unblock)') {
+            $result += [pscustomobject]@{ Target = $Matches[1].ToLower(); Mode = $Matches[2] }
+        }
+    }
+    return $result
+}
+
+function Restore-Modes($Saved) {
+    # 테스트 중 block 으로 바꾼 대상을 원래 상태로 되돌린다.
+    if (-not $Saved -or $Saved.Count -eq 0) { return $false }
+
+    $ok = $true
+    foreach ($entry in $Saved) {
+        $response = Invoke-TB "$($entry.Mode) $($entry.Target)"
+        if ($response -notmatch '^OK') {
+            $ok = $false
+            Write-Host "  $($entry.Target) 상태 복원 실패: $($response -replace "`r?`n", ' ')" -ForegroundColor Red
+        }
+    }
+    return $ok
+}
+
 function Restore-Schedule($Saved) {
     # 테스트 전 스케줄을 요일 단위로 그대로 되돌린다.
     # (21:00~07:00 같은 값을 임의로 가정하면 "토요일 제한 없음" 같은 설정이 지워진다)
@@ -219,6 +248,10 @@ try {
     Add-Result "4. Normal DNS resolution" $allowedOk "$AllowedDomain"
     if (-not $allowedOk) { Assert-InternetAlive 'step 4' }
 
+    # 대상 상태(auto/block/unblock)를 먼저 저장해 둔다.
+    # step 10 에서 block 을 쓰므로 끝나면 여기 값으로 되돌린다.
+    $script:SavedModes = Get-CurrentModes
+
     # 5~7 은 차단 시간대에서만 의미가 있다. 현재 차단 상태를 확인한다.
     $status = Invoke-TB 'status'
     $youtubeBlocked = $status -match 'YouTube\s+:\s+BLOCKED'
@@ -275,10 +308,11 @@ try {
         $(if ($allowedDuringPermit) { "$BlockedDomain resolves" } else { 'still blocked (허용 미반영)' })
 
     # 10. 허용 취소 후 다시 차단
-    Invoke-TB 'lock youtube' | Out-Null
+    # block 은 일시 허용을 취소하고 그 대상을 즉시 막는다. (finally 에서 원래 상태로 되돌린다)
+    Invoke-TB 'block youtube' | Out-Null
     Start-Sleep -Seconds 3
     $reblocked = -not (Test-Resolves $BlockedDomain)
-    Add-Result "10. Re-blocked after lock" $reblocked `
+    Add-Result "10. Re-blocked after block" $reblocked `
         $(if ($reblocked) { 'blocked' } else { 'RESOLVED (재차단 실패)' })
 
     Assert-InternetAlive 'step 10'
@@ -370,8 +404,19 @@ finally {
         }
     }
 
-    # 남아 있을 수 있는 일시 허용 제거
-    try { Invoke-TB 'lock' | Out-Null } catch { }
+    # 테스트가 바꾼 대상 상태를 원래대로 되돌린다.
+    # (여기서 'block' 을 쓰면 테스트 후 PC 가 계속 잠긴 채로 남는다)
+    if ($script:SavedModes) {
+        try {
+            if (Restore-Modes $script:SavedModes) {
+                Write-Host "대상 상태를 원래대로 되돌렸습니다." -ForegroundColor DarkGray
+            }
+        }
+        catch {
+            Write-Host "  상태 복원 중 오류: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  텔레그램에서 targets 로 현재 상태를 확인하세요." -ForegroundColor Red
+        }
+    }
 
     if ($script:Aborted) {
         Write-Host "안전을 위해 어댑터 DNS 를 원래 설정으로 복구합니다..." -ForegroundColor Yellow
