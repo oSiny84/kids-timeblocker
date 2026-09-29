@@ -125,15 +125,54 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
         };
     }
 
-    /// <summary>"block all" 은 lock 과 동일하게 처리한다.</summary>
+    /// <summary>
+    /// block 계열 명령.
+    ///
+    ///   block youtube on    YouTube 차단 켜기   (= enable youtube)
+    ///   block youtube off   YouTube 차단 끄기   (= disable youtube)
+    ///   block all           일시 허용 전부 취소 (= lock)
+    ///
+    /// enable/disable 은 "유튜브를 켠다/끈다" 로 읽히기 쉬워서,
+    /// 무엇이 켜지고 꺼지는지 드러나는 이 형태를 함께 제공한다.
+    /// </summary>
     private static RemoteCommand ParseBlock(string raw, string[] args)
     {
+        const string usage =
+            "Usage:\nblock youtube on    (차단 켜기)\n" +
+            "block youtube off   (차단 끄기)\n" +
+            "block all           (일시 허용 전부 취소)";
+
         if (args.Length == 0)
         {
-            return RemoteCommand.Invalid(raw, "ERROR\nUsage:\nblock all\nlock youtube\nlock roblox");
+            return RemoteCommand.Invalid(raw, $"ERROR\n무엇을 할지 지정하세요.\n\n{usage}");
         }
 
-        return ParseLock(raw, args);
+        if (!TryParseTarget(args[0], out var target))
+        {
+            return RemoteCommand.Invalid(raw, $"ERROR\nUnknown target: {args[0]}\n\n{usage}");
+        }
+
+        // "block all" 은 예전부터 "일시 허용 전부 취소" 였다. 그대로 둔다.
+        if (target == BlockTarget.All) return ParseLock(raw, args);
+
+        // 대상만 적고 on/off 가 없으면 무엇을 뜻하는지 알 수 없다.
+        // 예전에는 조용히 lock 으로 처리했는데, "차단을 켠다" 는 의도와 어긋난다.
+        if (args.Length < 2)
+        {
+            var name = args[0].ToLowerInvariant();
+            return RemoteCommand.Invalid(raw,
+                $"ERROR\non 또는 off 를 함께 지정하세요.\n\n" +
+                $"block {name} on    차단 켜기\n" +
+                $"block {name} off   차단 끄기\n" +
+                $"lock {name}        일시 허용만 취소");
+        }
+
+        return args[1].ToLowerInvariant() switch
+        {
+            "on" => new RemoteCommand { Type = RemoteCommandType.EnableTarget, Target = target, RawText = raw },
+            "off" => new RemoteCommand { Type = RemoteCommandType.DisableTarget, Target = target, RawText = raw },
+            _ => RemoteCommand.Invalid(raw, $"ERROR\non 또는 off 만 쓸 수 있습니다: {args[1]}\n\n{usage}")
+        };
     }
 
     // ---------------------------------------------------------- enable/disable

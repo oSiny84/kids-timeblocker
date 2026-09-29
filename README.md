@@ -443,11 +443,17 @@ schedule default 21:00 07:00     전체 요일 기본값
 ### 차단 대상 ON/OFF
 
 ```
-enable youtube     YouTube 차단 켜기
-disable youtube    YouTube 차단 끄기 (완전히 열어둠)
-enable roblox
-disable roblox
+block youtube on     YouTube 를 막는다
+block youtube off    YouTube 를 안 막는다 (항상 열어둠)
+block roblox on
+block roblox off
 ```
+
+`enable youtube` / `disable youtube` 도 같은 뜻이지만, **"유튜브를 켠다/끈다" 로 읽히기 쉬워
+`block ... on/off` 를 권합니다.** 켜고 꺼지는 것은 사이트가 아니라 "차단 기능" 입니다.
+
+> `block all` 은 다른 뜻입니다. 이건 **일시 허용을 전부 취소**하는 `lock` 과 같습니다.
+> `block youtube` 처럼 on/off 없이 쓰면 무엇을 뜻하는지 되묻습니다.
 
 **켜고 끄는 것은 "차단 기능" 이지 사이트가 아닙니다.**
 

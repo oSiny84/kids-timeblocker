@@ -178,7 +178,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         {
             builder.AppendLine();
             builder.AppendLine($"※ {string.Join(", ", offTargets)} 는 차단이 꺼져 있어 스케줄과 무관하게 열립니다.");
-            builder.AppendLine($"   켜려면: enable {offTargets[0].ToLowerInvariant()}");
+            builder.AppendLine($"   켜려면: block {offTargets[0].ToLowerInvariant()} on");
         }
 
         builder.AppendLine();
@@ -219,7 +219,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         {
             builder.AppendLine();
             builder.AppendLine("※ 차단 OFF 인 대상은 스케줄이 맞아도 차단되지 않습니다.");
-            builder.AppendLine($"   켜려면: enable {offTargets[0].ToLowerInvariant()}");
+            builder.AppendLine($"   켜려면: block {offTargets[0].ToLowerInvariant()} on");
         }
 
         return builder.ToString().TrimEnd();
@@ -289,7 +289,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         if (target != BlockTarget.All && !_configStore.Current.GetTarget(target).Enabled)
         {
             return $"ERROR\n{target.ToDisplayName()} 는 차단이 꺼져 있어 이미 열려 있습니다.\n" +
-                   $"일시 허용이 필요 없습니다.\n\n차단을 켜려면: enable {target.ToDisplayName().ToLowerInvariant()}";
+                   $"일시 허용이 필요 없습니다.\n\n차단을 켜려면: block {target.ToDisplayName().ToLowerInvariant()} on";
         }
 
         var result = _permits.Grant(target, command.Minutes, source);

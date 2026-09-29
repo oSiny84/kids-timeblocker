@@ -137,10 +137,11 @@ public static class ResponseFormatter
         schedule default 21:00 07:00
 
         [Target] 대상별 차단 ON/OFF
-        enable youtube    YouTube 차단 켜기
-        disable youtube   YouTube 차단 끄기 (완전히 열어둠)
-        enable roblox
-        disable roblox
+        block youtube on    YouTube 를 막는다
+        block youtube off   YouTube 를 안 막는다 (항상 열어둠)
+        block roblox on
+        block roblox off
+        (enable youtube / disable youtube 도 같은 뜻)
 
         [Domains]
         domains youtube

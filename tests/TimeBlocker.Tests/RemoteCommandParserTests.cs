@@ -119,6 +119,56 @@ public class RemoteCommandParserTests
         Assert.Null(command.Target);
     }
 
+    // ------------------------------------------------- block <대상> on/off
+
+    [Theory]
+    [InlineData("block youtube on", RemoteCommandType.EnableTarget, BlockTarget.YouTube)]
+    [InlineData("block youtube off", RemoteCommandType.DisableTarget, BlockTarget.YouTube)]
+    [InlineData("block roblox on", RemoteCommandType.EnableTarget, BlockTarget.Roblox)]
+    [InlineData("block rb off", RemoteCommandType.DisableTarget, BlockTarget.Roblox)]
+    [InlineData("BLOCK YouTube ON", RemoteCommandType.EnableTarget, BlockTarget.YouTube)]
+    public void BlockTargetOnOff_SetsBlockingPolicy(
+        string input, RemoteCommandType expectedType, BlockTarget expectedTarget)
+    {
+        // enable/disable 이 "유튜브를 켠다/끈다" 로 읽히는 문제 때문에 추가한 형태.
+        var command = _sut.Parse(input);
+
+        Assert.Equal(expectedType, command.Type);
+        Assert.Equal(expectedTarget, command.Target);
+    }
+
+    [Fact]
+    public void BlockTarget_WithoutOnOff_AsksToBeExplicit()
+    {
+        // 예전에는 조용히 "일시 허용 취소(lock)" 로 처리됐는데,
+        // 사용자는 "차단을 켠다" 는 뜻으로 쓸 가능성이 높아 확인을 요구한다.
+        var command = _sut.Parse("block youtube");
+
+        Assert.Equal(RemoteCommandType.Unknown, command.Type);
+        Assert.Contains("block youtube on", command.Error);
+        Assert.Contains("block youtube off", command.Error);
+        Assert.Contains("lock youtube", command.Error);
+    }
+
+    [Fact]
+    public void BlockTarget_WithBadState_IsRejected()
+    {
+        var command = _sut.Parse("block youtube maybe");
+
+        Assert.Equal(RemoteCommandType.Unknown, command.Type);
+        Assert.Contains("on 또는 off", command.Error);
+    }
+
+    [Fact]
+    public void BlockAll_StillMeansCancelPermits()
+    {
+        // "block all" 은 기존 의미(일시 허용 전부 취소)를 유지한다.
+        var command = _sut.Parse("block all");
+
+        Assert.Equal(RemoteCommandType.Lock, command.Type);
+        Assert.Null(command.Target);
+    }
+
     // -------------------------------------------------------- enable/disable
 
     [Theory]
