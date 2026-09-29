@@ -138,9 +138,12 @@ TimeBlocker $Version 설치 안내
     https://dotnet.microsoft.com/download/dotnet/8.0
  2. Telegram Bot Token
     텔레그램에서 @BotFather -> /newbot -> 토큰 받기
- 3. 본인의 Telegram 숫자 User ID
-    텔레그램에서 @userinfobot -> /start -> "Id:" 뒤의 숫자
- 4. 만든 봇에게 /start 를 한 번 보내둘 것 (안 하면 봇이 메시지를 못 받음)
+ 3. 만든 봇에게 /start 를 한 번 보내둘 것 (먼저 안 하면 4번이 안 됨)
+ 4. 본인의 Telegram 숫자 User ID
+    브라우저나 curl 로 아래 주소를 열어 "from":{"id":...} 의 숫자를 확인
+    (<TOKEN> 자리를 2번에서 받은 Bot Token 으로 바꿀 것)
+    https://api.telegram.org/bot<TOKEN>/getUpdates
+    (@userinfobot 같은 제3자 봇은 응답이 안 올 때가 있어 이 방법을 권장)
 
 [설치]
  install.bat 을 실행합니다. (권한 상승 창이 뜨면 "예")

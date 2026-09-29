@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
@@ -19,7 +19,10 @@ echo  Telegram 설정 변경
 echo ==========================================================
 echo.
 echo  [Bot Token]  @BotFather 에게 /newbot 으로 만든 토큰
-echo  [User ID]    @userinfobot 이 알려준 "Id:" 뒤의 숫자
+echo  [User ID]    숫자로 된 내 Telegram ID. 확인법:
+echo               봇에게 메시지 하나 보낸 뒤 브라우저에서
+echo               api.telegram.org/bot[Bot Token]/getUpdates 를 열어
+echo               "from":{"id":숫자...} 의 숫자를 확인
 echo.
 
 set "BOT_TOKEN="

@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
@@ -52,11 +52,15 @@ echo.
 echo  [Bot Token]  @BotFather 에게 /newbot 으로 만든 토큰
 echo               예) 123456789:AAE-xxxxxxxxxxxxxxxxxxxxxxxxx
 echo.
-echo  [User ID]    @userinfobot 이 알려준 "Id:" 뒤의 숫자
+echo  [User ID]    숫자로 된 내 Telegram ID (@username 아님)
+echo               확인 방법:
+echo                 1. 만든 봇에게 메시지를 하나 보낸다 (예: /start)
+echo                 2. 브라우저에서 주소를 연다: api.telegram.org/bot[Bot Token]/getUpdates
+echo                    (주소의 [Bot Token] 자리를 위에서 받은 토큰으로 바꿀 것)
+echo                 3. 화면에 나오는 "from":{"id":숫자...} 의 숫자가 User ID
 echo               예) 123456789
-echo               (@username 이 아니라 숫자입니다)
 echo.
-echo  ※ 만든 봇에게 /start 를 한 번 보내두어야 합니다.
+echo  ※ 만든 봇에게 /start 를 한 번 보내두어야 합니다. (위 1번과 같음)
 echo.
 echo  둘 다 비워두고 Enter 를 누르면 나중에 설정할 수 있습니다.
 echo.

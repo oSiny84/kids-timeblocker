@@ -18,11 +18,22 @@ Windows 10 / 11 에서 **시간대별로 YouTube / Roblox 접근을 차단**하�
 | **.NET 8 Desktop Runtime** | [다운로드 페이지](https://dotnet.microsoft.com/download/dotnet/8.0) → **"Desktop Runtime" x64** 클릭 |
 | **TimeBlocker 설치 파일** | [최신 릴리즈](https://github.com/oSiny84/kids-timeblocker/releases/latest) → `TimeBlocker-*.zip` 다운로드 |
 
-### 2) 텔레그램 봇 만들기 (한 번만 하면 됩니다)
+### 2) 텔레그램 봇 만들기 + 내 User ID 확인 (한 번만 하면 됩니다)
 
-1. 텔레그램 앱에서 **@BotFather** 검색 → `/newbot` 전송 → 안내대로 이름 정하면 **Bot Token** 을 줍니다 (긴 문자열, 복사해두기)
-2. 텔레그램 앱에서 **@userinfobot** 검색 → 아무 메시지나 전송 → 내 **숫자 User ID** 확인
-3. 방금 만든 내 봇을 검색해서 `/start` 한 번 보내두기 (안 하면 봇이 메시지를 못 받습니다)
+1. 텔레그램 앱에서 **@BotFather** 검색 → `/newbot` 전송 → 안내대로 이름 정하면 **Bot Token** 을 줍니다
+   (형식: `123456789:AAE-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`, 복사해두기)
+2. 방금 만든 내 봇을 검색해서 아무 메시지나 하나 보내두기 (예: `/start`)
+   — 이걸 먼저 안 하면 3번에서 아무것도 안 나옵니다
+3. 내 **숫자 User ID** 확인하기 — 아래 주소의 `<TOKEN>` 자리를 1번에서 받은 Bot Token 으로
+   바꿔서 **웹브라우저 주소창**에 붙여넣고 엔터
+
+   ```
+   https://api.telegram.org/bot<TOKEN>/getUpdates
+   ```
+
+   화면에 나오는 글자 중 `"from":{"id":123456789,...` 처럼 생긴 부분의 **숫자**가 User ID 입니다.
+   (`@userinfobot` 같은 제3자 봇은 응답이 안 오거나 막혀 있을 때가 있어, 텔레그램이 직접
+   주는 이 방법을 씁니다. 터미널이 편하면 `curl "https://api.telegram.org/bot<TOKEN>/getUpdates"` 도 동일합니다.)
 
 ### 3) 설치
 
@@ -41,7 +52,23 @@ status
 ```
 
 응답이 오면 성공입니다. 이상하면 `doctor` 를 쳐서 원인과 조치 방법을 확인하세요.
-전체 명령어 목록은 `help` (또는 `list`) 로 볼 수 있습니다.
+
+### 5) 자주 쓰는 명령
+
+이것만 알아도 웬만한 건 다 됩니다. 대상은 `youtube` / `roblox` / `all` 로 바꿔서 씁니다.
+
+| 명령 | 뜻 |
+|---|---|
+| `status` | 지금 상태 보기 (막혔는지, 왜 그런지) |
+| `auto youtube` | YouTube 스케줄대로 (기본값) |
+| `block youtube` | YouTube 를 스케줄 무시하고 계속 막기 |
+| `unblock youtube` | YouTube 를 스케줄 무시하고 계속 열어두기 |
+| `youtube 30` | 30분만 허용 (시간 지나면 자동으로 원래 상태로) |
+| `schedule mon-fri 21:00 07:00` | 평일 21시 ~ 다음날 7시 차단 |
+| `msg 밥 먹고 하자` | PC 화면에 메시지 띄우기 |
+| `help` (또는 `list`) | 전체 명령 목록 |
+
+명령과 예시를 더 자세히 보려면 아래 **"8. Telegram 명령어"** 섹션을 참고하세요.
 
 > **자녀 계정은 꼭 "표준 사용자"로 만들어 주세요.** 관리자 계정이면 서비스를 직접 끌 수 있어
 > 의미가 없습니다. (설정 → 계정 → 가족 및 다른 사용자)
@@ -335,9 +362,13 @@ Windows 보안 기능을 우회하거나 프로세스를 숨기지 않습니다.
 
 1. Telegram 에서 **@BotFather** 에게 `/newbot` 을 보내 봇을 만들고 **Bot Token** 을 받습니다.
    (형식: `123456789:AAE-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`)
-2. 내 **숫자 User ID** 를 확인합니다. **@userinfobot** 에게 아무 메시지나 보내면 알려줍니다.
+2. 만든 봇과 **먼저 1:1 대화를 시작**합니다. (`/start` 를 한 번 보내야 봇이 메시지를 받을 수 있습니다)
+3. 내 **숫자 User ID** 를 확인합니다.
    - username 이 아니라 반드시 **숫자 ID** 여야 합니다. username 은 바뀔 수 있어 인증에 쓰지 않습니다.
-3. 만든 봇과 **먼저 1:1 대화를 시작**합니다. (`/start` 를 한 번 보내야 봇이 메시지를 받을 수 있습니다)
+   - 가장 확실한 방법: 2번에서 봇에게 메시지를 보낸 뒤, 브라우저나 `curl` 로
+     `https://api.telegram.org/bot<TOKEN>/getUpdates` 를 열어 `"from":{"id":...}` 의 숫자를 읽습니다.
+     (`<TOKEN>` 은 1번에서 받은 Bot Token) `@userinfobot` 같은 제3자 봇으로도 확인할 수 있지만
+     응답이 안 올 때가 있어 위 방법이 더 확실합니다.
 4. PC 에서 관리자 권한으로 설정합니다.
 
 ```powershell
