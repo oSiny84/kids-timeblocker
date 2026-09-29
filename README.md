@@ -1,5 +1,7 @@
 # TimeBlocker
 
+[한국어](README.md) | [English](README.en.md)
+
 Windows 10 / 11 에서 **시간대별로 YouTube / Roblox 접근을 차단**하는 프로그램입니다.
 
 관리자는 **Telegram 채팅창을 원격 콘솔처럼 사용해서** 상태를 확인하고, 차단 시간을 바꾸고,
