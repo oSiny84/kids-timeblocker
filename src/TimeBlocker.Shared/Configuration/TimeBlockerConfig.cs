@@ -198,7 +198,7 @@ public sealed class TimeBlockerConfig
             Schedule = WeeklySchedule.CreateDefault(),
             YouTube = new TargetSettings
             {
-                Enabled = true,
+                Mode = BlockMode.Schedule,
                 UseDnsBlocking = true,
                 UseFirewallBlocking = false,
                 Domains = new List<string>
@@ -215,7 +215,7 @@ public sealed class TimeBlockerConfig
             },
             Roblox = new TargetSettings
             {
-                Enabled = true,
+                Mode = BlockMode.Schedule,
                 UseDnsBlocking = true,
                 UseFirewallBlocking = true,
                 Domains = new List<string>
