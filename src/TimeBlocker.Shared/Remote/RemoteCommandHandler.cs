@@ -40,6 +40,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
     private readonly ISystemClock _clock;
     private readonly IRemoteCommandParser _parser;
     private readonly IDiagnosticsService? _diagnostics;
+    private readonly IUserMessenger? _messenger;
     private readonly ILogger<RemoteCommandHandler> _logger;
 
     public RemoteCommandHandler(
@@ -51,7 +52,8 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         ISystemClock clock,
         IRemoteCommandParser? parser = null,
         ILogger<RemoteCommandHandler>? logger = null,
-        IDiagnosticsService? diagnostics = null)
+        IDiagnosticsService? diagnostics = null,
+        IUserMessenger? messenger = null)
     {
         _configStore = configStore;
         _permits = permits;
@@ -61,6 +63,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         _clock = clock;
         _parser = parser ?? new RemoteCommandParser();
         _diagnostics = diagnostics;
+        _messenger = messenger;
         _logger = logger ?? NullLogger<RemoteCommandHandler>.Instance;
     }
 
@@ -93,6 +96,8 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
                     await _enforcement.RunDnsSelfTestAsync(cancellationToken).ConfigureAwait(false),
                 RemoteCommandType.DnsRestore =>
                     await _enforcement.RestoreAdapterDnsAsync(cancellationToken).ConfigureAwait(false),
+                RemoteCommandType.SendMessage =>
+                    await HandleSendMessageAsync(command, cancellationToken).ConfigureAwait(false),
                 RemoteCommandType.Ping => BuildPing(),
                 RemoteCommandType.Version => BuildVersion(),
 
@@ -125,6 +130,19 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
             WriteAuditLog(command, source, success: false);
             return $"ERROR\nCommand failed: {ex.Message}";
         }
+    }
+
+    /// <summary>PC 화면에 메시지를 띄운다.</summary>
+    private async Task<string> HandleSendMessageAsync(RemoteCommand command, CancellationToken ct)
+    {
+        if (_messenger is null) return "ERROR\n이 환경에서는 메시지를 보낼 수 없습니다.";
+
+        var shown = await _messenger.SendToPcAsync(command.Text!, ct).ConfigureAwait(false);
+
+        // 아무도 로그인해 있지 않으면 메시지는 사라진다. 보냈다고 하면 안 된다.
+        return shown > 0
+            ? $"OK\nPC 화면에 띄웠습니다. (창 {shown}개)"
+            : "ERROR\n지금 PC 에 로그인한 사용자가 없어 띄우지 못했습니다.\n로그인한 뒤 다시 보내세요.";
     }
 
     /// <summary>doctor 점검. 진단 서비스가 주입되지 않은 환경(테스트 등)에서는 안내만 돌려준다.</summary>

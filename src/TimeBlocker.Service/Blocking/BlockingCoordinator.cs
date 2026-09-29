@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using TimeBlocker.Service.Blocking.Dns;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Core;
@@ -25,6 +25,10 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
     private readonly IDnsCacheFlusher _dnsCache;
     private readonly IDnsSelfTest _selfTest;
     private readonly RobloxLocator _locator;
+    private readonly ProcessEnforcer _processEnforcer;
+
+    /// <summary>실행파일을 못 찾았다는 경고를 마지막으로 남긴 시각. 로그 폭주를 막는다.</summary>
+    private readonly Dictionary<BlockTarget, DateTimeOffset> _noExecutableWarned = new();
     private readonly ILogger<BlockingCoordinator> _logger;
 
     private readonly SemaphoreSlim _applyLock = new(1, 1);
@@ -67,6 +71,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         IDnsCacheFlusher dnsCache,
         IDnsSelfTest selfTest,
         RobloxLocator locator,
+        ProcessEnforcer processEnforcer,
         ILogger<BlockingCoordinator> logger)
     {
         _configStore = configStore;
@@ -78,6 +83,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         _dnsCache = dnsCache;
         _selfTest = selfTest;
         _locator = locator;
+        _processEnforcer = processEnforcer;
         _logger = logger;
     }
 
@@ -187,7 +193,12 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
 
             var found = _locator.Locate(settings.ProcessNames).ToList();
             found.AddRange(settings.ExtraExecutablePaths.Where(File.Exists));
-            executablesToBlock[ruleName] = found.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var paths = found.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            executablesToBlock[ruleName] = paths;
+
+            // 실행파일을 못 찾으면 방화벽 규칙이 아예 만들어지지 않는다.
+            // 조용히 넘어가면 "막았는데 게임이 되네" 로 이어지므로 반드시 알린다.
+            if (paths.Count == 0) WarnNoExecutable(decision.Target, settings);
         }
 
         _detectedExecutables = executablesToBlock.Values.SelectMany(v => v).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -199,6 +210,18 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         if (config.Dns.Enabled && config.Dns.Mode != DnsBlockingMode.Hosts)
         {
             await RunHealthCheckAsync(config, domainsToBlock, ct).ConfigureAwait(false);
+        }
+
+        // 3-1. 차단 시간인데 게임이 돌고 있으면 유예 시간을 주고 종료한다.
+        //      DNS/방화벽은 이미 붙어 있는 연결을 못 끊는 경우가 있어 별도로 확인한다.
+        //      상태가 그대로여도 매 주기 확인해야 하므로 signature 비교보다 앞에 둔다.
+        try
+        {
+            _processEnforcer.Evaluate(decisions, config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "프로세스 단속 중 오류가 발생했습니다. 다음 주기에 다시 시도합니다.");
         }
 
         var signature = BuildSignature(config, domainsToBlock, executablesToBlock);
@@ -721,6 +744,33 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         BlockTarget.YouTube => FirewallManager.YouTubeRuleName,
         _ => $"TimeBlocker_{target}_Block"
     };
+
+    /// <summary>
+    /// 방화벽 차단 대상인데 실행파일을 못 찾았다. 매 주기 찍으면 로그가 넘치므로
+    /// 처음 한 번과 이후 30분에 한 번만 남긴다.
+    /// </summary>
+    private void WarnNoExecutable(BlockTarget target, TargetSettings settings)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+
+        lock (_noExecutableWarned)
+        {
+            if (_noExecutableWarned.TryGetValue(target, out var lastUtc)
+                && nowUtc - lastUtc < TimeSpan.FromMinutes(30))
+            {
+                return;
+            }
+
+            _noExecutableWarned[target] = nowUtc;
+        }
+
+        _logger.LogWarning(
+            "{Target} 차단 시간이지만 실행파일({Names})을 찾지 못해 방화벽 규칙을 만들지 못했습니다. " +
+            "도메인 차단만 적용됩니다. 이미 실행 중인 프로그램은 막히지 않을 수 있습니다. " +
+            "Microsoft Store 판 등 다른 위치에 설치했다면 ExtraExecutablePaths 에 전체 경로를 적어주세요.",
+            target.ToDisplayName(),
+            string.Join(", ", settings.ProcessNames));
+    }
 
     private static string BuildSignature(
         TimeBlockerConfig config,

@@ -1,4 +1,4 @@
-using TimeBlocker.Shared.Models;
+﻿using TimeBlocker.Shared.Models;
 
 namespace TimeBlocker.Shared.Configuration;
 
@@ -97,7 +97,13 @@ public sealed class TargetSettings
 
     public bool UseFirewallBlocking { get; set; }
 
-    /// <summary>방화벽으로 막을 실행파일 이름(자동 탐색용).</summary>
+    /// <summary>
+    /// 차단 시간에 이 프로세스가 돌고 있으면 유예 시간을 주고 종료할지.
+    /// DNS/방화벽은 이미 실행 중인 게임의 접속을 끊지 못하는 경우가 있어 필요하다.
+    /// </summary>
+    public bool TerminateProcesses { get; set; }
+
+    /// <summary>방화벽 차단 / 프로세스 종료 대상 실행파일 이름.</summary>
     public List<string> ProcessNames { get; set; } = new();
 
     /// <summary>자동 탐색에 더해 수동으로 지정한 실행파일 전체 경로.</summary>
@@ -158,6 +164,12 @@ public sealed class EnforcementSettings
 
     /// <summary>시스템 시간이 이 분 이상 갑자기 변하면 이상 변경으로 기록한다.</summary>
     public int TimeJumpThresholdMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// 차단 시간에 게임이 돌고 있을 때, 경고를 띄우고 종료하기까지 기다리는 시간(분).
+    /// 0 이면 경고 없이 즉시 종료한다.
+    /// </summary>
+    public int TerminationGraceMinutes { get; set; } = 5;
 }
 
 /// <summary>TimeBlocker 전체 설정. timeblocker.config.json 으로 저장된다.</summary>
@@ -218,6 +230,7 @@ public sealed class TimeBlockerConfig
                 Mode = BlockMode.Schedule,
                 UseDnsBlocking = true,
                 UseFirewallBlocking = true,
+                TerminateProcesses = true,
                 Domains = new List<string>
                 {
                     "roblox.com",

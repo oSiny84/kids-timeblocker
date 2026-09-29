@@ -155,6 +155,55 @@ public class RemoteCommandParserTests
         Assert.Contains("Usage:", command.Error);
     }
 
+    // --------------------------------------------------------------- 메시지
+
+    [Theory]
+    [InlineData("msg 밥 먹고 하자")]
+    [InlineData("say 밥 먹고 하자")]
+    [InlineData("/msg 밥 먹고 하자")]
+    public void SendMessage_KeepsWholeTextAfterCommand(string input)
+    {
+        var command = _sut.Parse(input);
+
+        Assert.Equal(RemoteCommandType.SendMessage, command.Type);
+        Assert.Equal("밥 먹고 하자", command.Text);
+    }
+
+    [Fact]
+    public void SendMessage_PreservesInnerSpacing()
+    {
+        // 토큰으로 잘라 붙이면 띄어쓰기가 뭉개진다.
+        var command = _sut.Parse("msg 30분   뒤에   저녁");
+
+        Assert.Equal("30분   뒤에   저녁", command.Text);
+    }
+
+    [Theory]
+    [InlineData("msg")]
+    [InlineData("msg    ")]
+    public void SendMessage_WithoutText_ReturnsUsage(string input)
+    {
+        var command = _sut.Parse(input);
+
+        Assert.Equal(RemoteCommandType.Unknown, command.Type);
+        Assert.Contains("Usage:", command.Error);
+    }
+
+    [Fact]
+    public void SendMessage_TooLong_IsRejected()
+    {
+        var command = _sut.Parse("msg " + new string('가', 501));
+
+        Assert.Equal(RemoteCommandType.Unknown, command.Type);
+        Assert.Contains("500자", command.Error);
+    }
+
+    [Fact]
+    public void SendMessage_IsNotConfigChanging()
+    {
+        Assert.False(_sut.Parse("msg 안녕").IsConfigChanging);
+    }
+
     // --------------------------------------------------------------- 스케줄
 
     [Fact]

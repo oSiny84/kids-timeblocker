@@ -39,7 +39,10 @@ public enum RemoteCommandType
     Reload,
 
     /// <summary>어댑터 DNS 를 저장된 원래 설정으로 즉시 되돌린다.</summary>
-    DnsRestore
+    DnsRestore,
+
+    /// <summary>PC 화면에 메시지를 띄운다.</summary>
+    SendMessage
 }
 
 /// <summary>
@@ -73,6 +76,9 @@ public sealed class RemoteCommand
 
     /// <summary>AddDomain / RemoveDomain 의 도메인.</summary>
     public string? Domain { get; init; }
+
+    /// <summary>SendMessage 로 PC 에 띄울 본문.</summary>
+    public string? Text { get; init; }
 
     /// <summary>SetMaxPermit 의 값(분).</summary>
     public int Value { get; init; }

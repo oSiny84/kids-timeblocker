@@ -59,6 +59,7 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
             // 1.1 이하 호환. enable=스케줄대로, disable=항상 열림 이었다.
             "enable" => ParseSetMode(raw, args, BlockMode.Schedule),
             "disable" => ParseSetMode(raw, args, BlockMode.Open),
+            "msg" or "say" or "message" or "tell" => ParseSendMessage(raw, body),
             "domains" or "domain" => ParseDomain(raw, head, args),
             "maxpermit" or "max" => ParseMaxPermit(raw, args),
             "admin" => ParseAdmin(raw, args),
@@ -153,6 +154,32 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
         }
 
         return new RemoteCommand { Type = RemoteCommandType.SetMode, Target = target, Mode = mode, RawText = raw };
+    }
+
+    // ---------------------------------------------------------------- 메시지
+
+    /// <summary>
+    /// "msg 밥 먹어라" 처럼 뒤에 오는 전체를 그대로 본문으로 쓴다.
+    /// 토큰으로 자르면 여러 칸 띄어쓰기나 줄바꿈이 사라지므로 원문에서 잘라낸다.
+    /// </summary>
+    private static RemoteCommand ParseSendMessage(string raw, string body)
+    {
+        const string usage = "Usage:\nmsg <보낼 내용>\n\nExample:\nmsg 밥 먹고 하자";
+
+        var space = body.IndexOfAny(new[] { ' ', '\t', '\n' });
+        var text = space < 0 ? string.Empty : body[(space + 1)..].Trim();
+
+        if (text.Length == 0)
+        {
+            return RemoteCommand.Invalid(raw, $"ERROR\n보낼 내용을 적어주세요.\n\n{usage}");
+        }
+
+        if (text.Length > 500)
+        {
+            return RemoteCommand.Invalid(raw, $"ERROR\n너무 깁니다. 500자 이내로 적어주세요. (현재 {text.Length}자)");
+        }
+
+        return new RemoteCommand { Type = RemoteCommandType.SendMessage, Text = text, RawText = raw };
     }
 
     // ---------------------------------------------------------------- domains

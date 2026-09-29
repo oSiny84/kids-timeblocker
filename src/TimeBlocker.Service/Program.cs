@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
@@ -131,6 +131,10 @@ public static class Program
         services.AddSingleton<INetworkAdapterDnsConfigurator, NetworkAdapterDnsConfigurator>();
         services.AddSingleton<IDnsCacheFlusher, DnsCacheFlusher>();
         services.AddSingleton<RobloxLocator>();
+        services.AddSingleton<IUserSessionNotifier, UserSessionNotifier>();
+        services.AddSingleton<IRunningProcessTracker, RunningProcessTracker>();
+        services.AddSingleton<ProcessEnforcer>();
+        services.AddSingleton<IUserMessenger, UserMessenger>();
 
         // --- 진단 / 원상복구 (doctor, cleanup 공통) ---
         services.AddSingleton<IDiagnosticsService>(sp => new DoctorService(
@@ -162,7 +166,8 @@ public static class Program
             sp.GetRequiredService<ISystemClock>(),
             sp.GetRequiredService<IRemoteCommandParser>(),
             sp.GetRequiredService<ILogger<RemoteCommandHandler>>(),
-            sp.GetRequiredService<IDiagnosticsService>()));
+            sp.GetRequiredService<IDiagnosticsService>(),
+            sp.GetRequiredService<IUserMessenger>()));
 
         // --- 원격 채널 ---
         services.AddSingleton<IHttpClientFactoryLite, SharedHttpClientFactory>();

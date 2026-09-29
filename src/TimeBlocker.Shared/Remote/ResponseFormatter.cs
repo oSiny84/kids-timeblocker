@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using TimeBlocker.Shared.Models;
 
 namespace TimeBlocker.Shared.Remote;
@@ -141,6 +141,10 @@ public static class ResponseFormatter
         schedule weekday 21:00 07:00
         schedule sat off
         schedule default 21:00 07:00
+
+        [Message] PC 화면에 띄우기
+        msg 밥 먹고 하자
+        say 이제 그만하자
 
         [Domains]
         domains youtube
