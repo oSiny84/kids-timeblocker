@@ -46,21 +46,28 @@ public static class Program
         var startupLogger = host.Services.GetRequiredService<ILogger<Worker.EnforcementWorker>>();
         DataDirectoryHardener.Harden(AppPaths.RootDirectory, startupLogger);
 
+        var exitCode = 0;
+
         try
         {
             await host.RunAsync().ConfigureAwait(false);
-            return 0;
         }
         catch (Exception ex)
         {
             startupLogger.LogCritical(ex, "서비스가 예기치 않게 종료되었습니다.");
-            return 1;
+            exitCode = 1;
         }
         finally
         {
             // 로그 큐를 비우고 파일을 닫는다.
             host.Services.GetService<FileLogWriter>()?.Dispose();
         }
+
+        // 서비스로 실행 중일 때는 Main 이 끝나도 프로세스가 남아 SCM 에는 계속 "실행 중"으로 보인다.
+        // 시작에 실패했는데 살아 있는 척하는 좀비가 되지 않도록 명시적으로 종료한다.
+        if (exitCode != 0) Environment.Exit(exitCode);
+
+        return exitCode;
     }
 
     private static void ConfigureLogging(HostApplicationBuilder builder)
@@ -136,7 +143,10 @@ public static class Program
         services.AddSingleton<ProcessEnforcer>();
         services.AddSingleton<IUserMessenger, UserMessenger>();
         services.AddSingleton<IUserAlertService, UserAlertService>();
-        services.AddSingleton<NotifierHub>();
+        services.AddSingleton<NotifierHub>(sp => new NotifierHub(
+            () => sp.GetRequiredService<IAdminNotifier>(),
+            sp.GetRequiredService<ISystemClock>(),
+            sp.GetRequiredService<ILogger<NotifierHub>>()));
         services.AddSingleton<INotificationHub>(sp => sp.GetRequiredService<NotifierHub>());
         services.AddHostedService(sp => sp.GetRequiredService<NotifierHub>());
 

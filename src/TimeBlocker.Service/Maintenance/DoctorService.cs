@@ -1,5 +1,6 @@
+﻿using System.IO.Pipes;
 using TimeBlocker.Service.Ipc;
-﻿using System.Net;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
@@ -64,6 +65,12 @@ public sealed class DoctorService : IDiagnosticsService
         // --- 권한 / 서비스 ---
         report.Add(CheckAdministrator());
         var (installed, running) = CheckService(report);
+
+        // 서비스 안에서 도는 진단이면(알림 허브가 있음) 응답 여부는 볼 필요가 없다.
+        if (running && _notifierHub is null)
+        {
+            report.Add(await CheckServiceRespondingAsync(ct).ConfigureAwait(false));
+        }
 
         // --- DNS 프록시 ---
         var port = config.Dns.ProxyPort;
@@ -160,6 +167,31 @@ public sealed class DoctorService : IDiagnosticsService
             report.Add(DoctorCheck.Warn("Service installed", $"조회 실패 ({ex.GetType().Name})"));
             report.Add(DoctorCheck.Warn("Service running", "조회 실패"));
             return (false, false);
+        }
+    }
+
+    /// <summary>
+    /// "실행 중"은 SCM 이 보는 상태일 뿐이다. 시작 중 멈춘 서비스도 Running 으로 보이므로
+    /// 제어 파이프에 실제로 붙어 보는 것이 진짜 확인이다.
+    /// </summary>
+    private static async Task<DoctorCheck> CheckServiceRespondingAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using var pipe = new NamedPipeClientStream(
+                ".", AppPaths.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            await pipe.ConnectAsync(2000, ct).ConfigureAwait(false);
+            return DoctorCheck.Pass("Service responding", "제어 파이프 연결됨");
+        }
+        catch (System.TimeoutException)
+        {
+            return DoctorCheck.Fail("Service responding", "제어 파이프에 연결할 수 없음",
+                "서비스가 '실행 중'으로 보이지만 내부가 멈춘 상태입니다. Restart-Service TimeBlocker 후에도 같으면 " +
+                @"C:\ProgramData\TimeBlocker\logs 의 최신 로그를 확인하세요.");
+        }
+        catch (Exception ex)
+        {
+            return DoctorCheck.Warn("Service responding", $"확인 실패 ({ex.GetType().Name})");
         }
     }
 

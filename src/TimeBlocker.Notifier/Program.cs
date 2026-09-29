@@ -22,6 +22,11 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
+        // 알림 앱이 예외로 죽으면 그 세션의 경고 표시가 사라진다. UI 스레드의 예외는 삼키고 계속 돈다.
+        // 차단 자체는 서비스가 하므로 이 앱의 상태와 무관하다.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, _) => { };
+
         // 파이프 스레드에서 UI 로 넘어올 때 쓴다.
         TrayApplicationContext.UiContext = new WindowsFormsSynchronizationContext();
         SynchronizationContext.SetSynchronizationContext(TrayApplicationContext.UiContext);

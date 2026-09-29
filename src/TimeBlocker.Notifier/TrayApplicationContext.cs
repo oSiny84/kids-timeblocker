@@ -19,6 +19,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     /// <summary>열려 있는 알림 창. 여러 개가 쌓이지 않게 한 번에 하나만 띄운다.</summary>
     private NotificationForm? _openForm;
 
+    private volatile bool _closing;
+
     public TrayApplicationContext()
     {
         _tray = new NotifyIcon
@@ -87,23 +89,24 @@ public sealed class TrayApplicationContext : ApplicationContext
     private void RunOnUiThread(Action action)
     {
         var form = _openForm;
+        var guarded = Guard(action);
 
         try
         {
             if (form is { IsDisposed: false, IsHandleCreated: true } && form.InvokeRequired)
             {
-                form.BeginInvoke(action);
+                form.BeginInvoke(guarded);
                 return;
             }
 
             // 창이 없을 때를 위해 동기화 컨텍스트를 쓴다.
             if (SynchronizationContext.Current is null && UiContext is not null)
             {
-                UiContext.Post(_ => action(), null);
+                UiContext.Post(_ => guarded(), null);
                 return;
             }
 
-            action();
+            guarded();
         }
         catch (ObjectDisposedException)
         {
@@ -115,6 +118,28 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    /// <summary>
+    /// UI 스레드에서 실행될 때는 위쪽 try/catch 가 닿지 않는다.
+    /// 종료 중 트레이 아이콘이 이미 해제된 뒤에 도착한 콜백이 프로세스를 죽이지 않게 여기서 막는다.
+    /// </summary>
+    private Action Guard(Action action) => () =>
+    {
+        if (_closing) return;
+
+        try
+        {
+            action();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 종료 중이다.
+        }
+        catch (InvalidOperationException)
+        {
+            // 핸들이 없어졌다.
+        }
+    };
+
     /// <summary>Program 이 UI 스레드에서 설정해 준다.</summary>
     public static SynchronizationContext? UiContext { get; set; }
 
@@ -122,6 +147,7 @@ public sealed class TrayApplicationContext : ApplicationContext
     {
         if (disposing)
         {
+            _closing = true;
             _tray.Visible = false;
             _tray.Dispose();
             _client.DisposeAsync().AsTask().GetAwaiter().GetResult();

@@ -32,7 +32,9 @@ public sealed class NotifierHub : BackgroundService, INotificationHub
 {
     private const int MaxConcurrentClients = 8;
 
-    private readonly IAdminNotifier _admins;
+    // 즉시 받으면 순환 의존성이 된다: NotifierHub -> Telegram -> 명령 처리기 -> 사용자 알림 -> NotifierHub.
+    // DI 컨테이너는 순환을 예외로 알리지 않고 그냥 멈춰 버리므로, 필요할 때 꺼내 쓴다.
+    private readonly Func<IAdminNotifier> _adminsFactory;
     private readonly ISystemClock _clock;
     private readonly ILogger<NotifierHub> _logger;
 
@@ -44,9 +46,9 @@ public sealed class NotifierHub : BackgroundService, INotificationHub
     /// <summary>권한 오류를 매번 찍지 않기 위한 플래그.</summary>
     private bool _accessDeniedLogged;
 
-    public NotifierHub(IAdminNotifier admins, ISystemClock clock, ILogger<NotifierHub> logger)
+    public NotifierHub(Func<IAdminNotifier> adminsFactory, ISystemClock clock, ILogger<NotifierHub> logger)
     {
-        _admins = admins;
+        _adminsFactory = adminsFactory;
         _clock = clock;
         _rateLimiter = new ReplyRateLimiter(clock);
         _logger = logger;
@@ -212,7 +214,7 @@ public sealed class NotifierHub : BackgroundService, INotificationHub
         var who = ReplyRateLimiter.Sanitize(reply!.UserName);
         var body = $"💬 PC 에서 온 메시지{(who.Length > 0 ? $" ({who})" : string.Empty)}\n\n{ReplyRateLimiter.Sanitize(text)}";
 
-        var sent = await _admins.NotifyAdminsAsync(body, ct).ConfigureAwait(false);
+        var sent = await _adminsFactory().NotifyAdminsAsync(body, ct).ConfigureAwait(false);
 
         // 본문은 로그에 남기지 않는다. 아이의 사생활이고, 로그 인젝션 위험도 있다.
         _logger.LogInformation("PC 답장을 관리자 {Count}명에게 전달했습니다. ({Length}자)", sent, text.Length);

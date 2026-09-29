@@ -482,6 +482,10 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         // 차단 도메인이 여전히 해석되면 어댑터 변경이 먹지 않은 것이다.
         if (!result.BlockedDomainBlocked)
         {
+            _logger.LogWarning(
+                "어댑터 DNS 변경 후에도 차단 도메인({Domain})이 여전히 해석됩니다. " +
+                "OS 가 로컬 프록시를 거치지 않고 다른 경로로 DNS 를 질의하고 있을 수 있습니다.",
+                blockedDomain);
             RecordSelfTest(result);
             return false;
         }
