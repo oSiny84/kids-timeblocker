@@ -183,15 +183,34 @@ public class AccessPolicyEngineTests
     }
 
     [Fact]
-    public void EvaluateAll_CoversBothRealTargets()
+    public void EvaluateAll_CoversEveryRealTarget()
     {
         var h = CreateHarness(At(23, 0));
 
         var decisions = h.Engine.EvaluateAll();
 
-        Assert.Equal(2, decisions.Count);
-        Assert.Contains(decisions, d => d.Target == BlockTarget.YouTube);
-        Assert.Contains(decisions, d => d.Target == BlockTarget.Roblox);
+        Assert.Equal(BlockTargets.Real.Length, decisions.Count);
+        Assert.All(BlockTargets.Real, target => Assert.Contains(decisions, d => d.Target == target));
+    }
+
+    [Fact]
+    public void Shorts_IsEvaluatedLikeAnyOtherTarget()
+    {
+        // 쇼츠는 차단 수단만 다르고(브라우저 정책) 판정 경로는 완전히 같아야 한다.
+        // 그래야 block / unblock / auto / 일시 허용이 전부 그대로 먹는다.
+        var h = CreateHarness(At(12, 0));   // 차단 시간대가 아닌 시각
+
+        h.Config.Shorts.Mode = BlockMode.Blocked;
+        Assert.True(h.Engine.Evaluate(BlockTarget.Shorts).IsBlocked);
+
+        h.Permits.Grant(BlockTarget.Shorts, 30, "test");
+        var permitted = h.Engine.Evaluate(BlockTarget.Shorts);
+        Assert.False(permitted.IsBlocked);
+        Assert.Equal(AccessReason.TemporaryPermit, permitted.Reason);
+
+        h.Config.Shorts.Mode = BlockMode.Open;
+        h.Permits.Cancel(BlockTarget.Shorts, "test");
+        Assert.False(h.Engine.Evaluate(BlockTarget.Shorts).IsBlocked);
     }
 
     [Fact]

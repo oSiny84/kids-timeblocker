@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TimeBlocker.Service.Blocking;
+using TimeBlocker.Service.Blocking.BrowserPolicy;
 using TimeBlocker.Service.Blocking.Dns;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Models;
@@ -23,12 +24,14 @@ public interface ISystemRestoreService
 ///   2. 저장된 원래 DNS 복원      <- 인터넷을 먼저 살린다
 ///   3. TimeBlocker hosts 영역 제거
 ///   4. TimeBlocker 방화벽 규칙 제거
-///   5. DNS 캐시 비우기
-///   6. (선택) 남은 상태파일 제거
+///   5. 브라우저 정책 원복
+///   6. DNS 캐시 비우기
+///   7. (선택) 남은 상태파일 제거
 ///
-/// 사용자의 기존 hosts 내용과 기존 방화벽 규칙은 절대 건드리지 않는다.
+/// 사용자의 기존 hosts 내용과 기존 방화벽 규칙, 기존 브라우저 정책은 절대 건드리지 않는다.
 /// - hosts 는 "# TIMEBLOCKER BEGIN ~ END" 마커 구간만 지운다.
 /// - 방화벽은 "TimeBlocker_" 로 시작하는 우리 규칙 이름만 지운다.
+/// - 브라우저 정책은 백업해 둔 원래 값으로만 되돌린다. 백업이 없으면 건드리지 않는다.
 /// </summary>
 public sealed class SystemRestoreService : ISystemRestoreService
 {
@@ -36,6 +39,7 @@ public sealed class SystemRestoreService : ISystemRestoreService
     private readonly IFirewallManager _firewall;
     private readonly INetworkAdapterDnsConfigurator _adapters;
     private readonly IDnsCacheFlusher _dnsCache;
+    private readonly IBrowserPolicyManager _browserPolicy;
     private readonly ILogger _logger;
 
     public SystemRestoreService(
@@ -43,12 +47,14 @@ public sealed class SystemRestoreService : ISystemRestoreService
         IFirewallManager firewall,
         INetworkAdapterDnsConfigurator adapters,
         IDnsCacheFlusher dnsCache,
+        IBrowserPolicyManager browserPolicy,
         ILogger logger)
     {
         _hosts = hosts;
         _firewall = firewall;
         _adapters = adapters;
         _dnsCache = dnsCache;
+        _browserPolicy = browserPolicy;
         _logger = logger;
     }
 
@@ -60,6 +66,7 @@ public sealed class SystemRestoreService : ISystemRestoreService
         report.Add(await RestoreDnsAsync(ct).ConfigureAwait(false));
         report.Add(CleanupHosts());
         report.Add(await CleanupFirewallAsync(ct).ConfigureAwait(false));
+        report.Add(RestoreBrowserPolicy());
         report.Add(await FlushDnsCacheAsync(ct).ConfigureAwait(false));
 
         if (removeStateFiles) report.Add(RemoveStateFiles());
@@ -189,7 +196,36 @@ public sealed class SystemRestoreService : ISystemRestoreService
         }
     }
 
-    // ------------------------------------------------------------- 5. DNS 캐시
+    // ------------------------------------------------------------- 5. 브라우저 정책
+
+    private RestoreStep RestoreBrowserPolicy()
+    {
+        const string name = "Browser policy restore";
+        try
+        {
+            if (!_browserPolicy.HasSavedOriginal) return RestoreStep.Skipped(name, "변경된 정책 없음");
+
+            _browserPolicy.Restore();
+
+            // 복구가 끝났는데도 백업이 남아 있으면 일부 브라우저가 실패한 것이다.
+            if (_browserPolicy.HasSavedOriginal)
+            {
+                return RestoreStep.Failed(name, "일부 브라우저 정책 복구 실패",
+                    @"regedit 에서 HKLM\SOFTWARE\Policies 아래 각 브라우저 키의 " +
+                    "URLBlocklist / IncognitoModeAvailability / DnsOverHttpsMode 를 직접 확인하세요.");
+            }
+
+            return RestoreStep.Ok(name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "브라우저 정책 복구 실패");
+            return RestoreStep.Failed(name, ex.GetType().Name,
+                @"regedit 에서 HKLM\SOFTWARE\Policies 아래 브라우저 정책 키를 직접 확인하세요.");
+        }
+    }
+
+    // ------------------------------------------------------------- 6. DNS 캐시
 
     private async Task<RestoreStep> FlushDnsCacheAsync(CancellationToken ct)
     {
@@ -207,7 +243,7 @@ public sealed class SystemRestoreService : ISystemRestoreService
         }
     }
 
-    // ------------------------------------------------------------- 6. 상태파일
+    // ------------------------------------------------------------- 7. 상태파일
 
     private RestoreStep RemoveStateFiles()
     {
@@ -222,6 +258,13 @@ public sealed class SystemRestoreService : ISystemRestoreService
             {
                 return RestoreStep.Failed(name, "어댑터 DNS 백업이 남아 있어 보존함",
                     "DNS 복구를 먼저 끝낸 뒤 다시 실행하세요. (dns-restore)");
+            }
+
+            // 브라우저 정책 백업도 같다. 지우면 원래 값으로 되돌릴 근거가 사라진다.
+            if (_browserPolicy.HasSavedOriginal)
+            {
+                return RestoreStep.Failed(name, "브라우저 정책 백업이 남아 있어 보존함",
+                    "브라우저 정책 복구가 끝난 뒤 다시 실행하세요.");
             }
 
             Directory.Delete(stateDirectory, recursive: true);

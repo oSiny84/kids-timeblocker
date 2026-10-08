@@ -24,6 +24,12 @@ public interface IEnforcementController
     /// <summary>방화벽 차단 대상으로 탐지된 실행파일 목록.</summary>
     IReadOnlyList<string> DetectedExecutables { get; }
 
+    /// <summary>
+    /// 브라우저 정책(URL 경로 차단)이 지금 어떤 상태인지. status 명령에서 사용한다.
+    /// 쇼츠 차단이 실제로 적용됐는지 확인하는 유일한 수단이므로 상태에 반드시 노출한다.
+    /// </summary>
+    string BrowserPolicyDescription { get; }
+
     /// <summary>`dns test` - 지금 즉시 DNS self-test 를 수행하고 결과를 돌려준다.</summary>
     Task<string> RunDnsSelfTestAsync(CancellationToken cancellationToken = default);
 
@@ -56,6 +62,8 @@ public sealed class NullEnforcementController : IEnforcementController
     };
 
     public IReadOnlyList<string> DetectedExecutables => Array.Empty<string>();
+
+    public string BrowserPolicyDescription { get; set; } = "Disabled";
 
     /// <summary>테스트에서 돌려줄 self-test 결과 문자열.</summary>
     public string SelfTestResponse { get; set; } = "OK\n\nProxy direct     : OK (test)";

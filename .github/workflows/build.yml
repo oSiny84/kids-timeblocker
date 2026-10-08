@@ -1,0 +1,75 @@
+# 빌드 + 단위 테스트 + 설치용 zip 생성.
+#
+# 왜 필요한가:
+#   이 프로젝트는 net8.0-windows / WinForms / 레지스트리 / 방화벽을 쓰므로
+#   Windows 에서만 빌드되고 테스트된다. 손으로 빌드할 PC 가 없을 때도
+#   변경이 정말 컴파일되는지, 테스트가 통과하는지 확인할 수 있어야 한다.
+#
+#   결과물(zip)은 Actions 실행 화면의 Artifacts 에서 내려받을 수 있다.
+#   그 zip 은 릴리즈에 올리는 것과 같은 방식으로 만들어지므로,
+#   압축만 풀고 install.bat 을 실행하면 바로 설치된다.
+name: build
+
+# 커밋 하나에 실행이 한 번만 돌게 트리거를 갈라 둔다.
+#
+# 모든 브랜치의 push 와 pull_request 를 둘 다 받으면, PR 이 열린 브랜치에 푸시할 때마다
+# 같은 커밋을 두 번 빌드한다. (push 실행 + PR 실행)
+# concurrency 는 이 둘을 묶지 못한다. github.ref 가 서로 다르기 때문이다.
+#   push         -> refs/heads/<브랜치>
+#   pull_request -> refs/pull/<번호>/merge
+#
+# 그래서 역할을 나눈다.
+#   작업 브랜치 -> PR 실행으로 검증한다
+#   main        -> 머지된 결과를 push 실행으로 검증한다
+#
+# 주의: PR 을 열기 전의 푸시는 빌드되지 않는다.
+# 그때 결과가 필요하면 Actions 탭에서 workflow_dispatch 로 직접 돌린다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # PR 을 열기 전이거나 다시 돌려보고 싶을 때 Actions 탭에서 직접 실행한다.
+  workflow_dispatch:
+
+# 같은 ref 에 새 커밋을 밀면 진행 중인 예전 실행을 취소한다.
+# 위에서 트리거를 갈라 두었으므로 PR 은 PR 실행끼리, main 은 main 실행끼리 묶인다.
+#
+# 없으면 이미 고친 커밋의 빌드가 끝까지 돌아가서, 뒤늦은 실패 보고가
+# 현재 상태인 것처럼 도착한다. (실제로 겪었다: 수정을 푸시한 2분 뒤에
+# 수정 전 커밋의 실패 알림이 왔다)
+# 러너 시간도 그만큼 낭비된다.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .NET 8 SDK 설치
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # 저장소에 있는 스크립트를 그대로 쓴다.
+      # 개발자가 로컬에서 build.bat 으로 돌리는 것과 같은 경로를 지나므로
+      # "CI 는 통과하는데 로컬은 깨지는" 차이가 생기지 않는다.
+      - name: 빌드 + 단위 테스트 + 게시
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      # 빌드가 끝난 결과를 재사용한다. (-SkipBuild)
+      - name: 설치용 zip 생성
+        shell: pwsh
+        run: ./scripts/make-release.ps1 -SkipBuild
+
+      - name: zip 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimeBlocker-${{ github.sha }}
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 14

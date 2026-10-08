@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using TimeBlocker.Service.Blocking;
+using TimeBlocker.Service.Blocking.BrowserPolicy;
 using TimeBlocker.Service.Blocking.Dns;
 using TimeBlocker.Service.Maintenance;
+using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Models;
 using TimeBlocker.Shared.Remote;
 using Xunit;
@@ -115,6 +117,31 @@ internal sealed class FakeDnsCacheFlusher : IDnsCacheFlusher
     }
 }
 
+internal sealed class FakeBrowserPolicyManager : IBrowserPolicyManager
+{
+    public bool HasSavedOriginal { get; set; }
+
+    public bool RestoreThrows { get; set; }
+
+    /// <summary>true 면 복구해도 백업이 남는다. (일부 브라우저 복구 실패 상황)</summary>
+    public bool RestoreLeavesBackup { get; set; }
+
+    public int RestoreCallCount { get; private set; }
+
+    public bool Apply(TimeBlockerConfig config, IReadOnlyCollection<string> urlPatterns) => false;
+
+    public bool Restore()
+    {
+        RestoreCallCount++;
+        if (RestoreThrows) throw new InvalidOperationException("registry restore failed");
+
+        if (!RestoreLeavesBackup) HasSavedOriginal = false;
+        return true;
+    }
+
+    public string Describe(TimeBlockerConfig config) => "test";
+}
+
 // ===================================================================== 복구 테스트
 
 /// <summary>
@@ -130,6 +157,7 @@ public class SystemRestoreServiceTests : IDisposable
     private readonly FakeFirewallManager _firewall = new();
     private readonly FakeAdapterConfigurator _adapters = new();
     private readonly FakeDnsCacheFlusher _dnsCache = new();
+    private readonly FakeBrowserPolicyManager _browserPolicy = new();
 
     public SystemRestoreServiceTests()
     {
@@ -148,7 +176,7 @@ public class SystemRestoreServiceTests : IDisposable
     }
 
     private SystemRestoreService CreateSut() =>
-        new(_hosts, _firewall, _adapters, _dnsCache, NullLogger.Instance);
+        new(_hosts, _firewall, _adapters, _dnsCache, _browserPolicy, NullLogger.Instance);
 
     private Task<RestoreReport> RunAsync(bool removeState = false) =>
         CreateSut().RestoreAsync(removeState, CancellationToken.None);
@@ -312,6 +340,75 @@ public class SystemRestoreServiceTests : IDisposable
         Assert.Contains("DNS restore", text);
         Assert.Contains("Hosts cleanup", text);
         Assert.Contains("Firewall cleanup", text);
+        Assert.Contains("Browser policy restore", text);
+    }
+
+    // ------------------------------------------------------- 브라우저 정책 복구
+
+    [Fact]
+    public async Task BrowserPolicy_SkippedWhenNothingWasChanged()
+    {
+        // 백업이 없으면 우리가 건드린 것도 없다. 레지스트리를 추측으로 지우면 안 된다.
+        var report = await RunAsync();
+        var step = report.Steps.Single(s => s.Name == "Browser policy restore");
+
+        Assert.True(step.Success);
+        Assert.Contains("SKIPPED", step.Result);
+        Assert.Equal(0, _browserPolicy.RestoreCallCount);
+    }
+
+    [Fact]
+    public async Task BrowserPolicy_RestoredWhenBackupExists()
+    {
+        _browserPolicy.HasSavedOriginal = true;
+
+        var report = await RunAsync();
+
+        Assert.True(report.Steps.Single(s => s.Name == "Browser policy restore").Success);
+        Assert.Equal(1, _browserPolicy.RestoreCallCount);
+    }
+
+    [Fact]
+    public async Task BrowserPolicyFailure_DoesNotStopOtherSteps()
+    {
+        _browserPolicy.HasSavedOriginal = true;
+        _browserPolicy.RestoreThrows = true;
+
+        var report = await RunAsync();
+
+        Assert.False(report.Steps.Single(s => s.Name == "Browser policy restore").Success);
+        // 레지스트리 복구가 실패해도 인터넷을 살리는 단계는 끝나 있어야 한다.
+        Assert.True(report.Steps.Single(s => s.Name == "Hosts cleanup").Success);
+        Assert.True(report.Steps.Single(s => s.Name == "DNS cache flush").Success);
+    }
+
+    [Fact]
+    public async Task BrowserPolicy_PartialFailureIsReported()
+    {
+        // 일부 브라우저만 복구된 경우. 백업이 남아 있으면 실패로 봐야 한다.
+        _browserPolicy.HasSavedOriginal = true;
+        _browserPolicy.RestoreLeavesBackup = true;
+
+        var report = await RunAsync();
+        var step = report.Steps.Single(s => s.Name == "Browser policy restore");
+
+        Assert.False(step.Success);
+        Assert.NotNull(step.Remedy);
+    }
+
+    [Fact]
+    public async Task StateCleanup_KeepsBackupWhenBrowserPolicyNotRestored()
+    {
+        // 브라우저 정책 백업이 남아 있으면 상태 폴더를 지우면 안 된다.
+        // 지우면 원래 레지스트리 값으로 되돌릴 근거가 사라진다.
+        _browserPolicy.HasSavedOriginal = true;
+        _browserPolicy.RestoreLeavesBackup = true;
+
+        var report = await RunAsync(removeState: true);
+        var step = report.Steps.Single(s => s.Name == "State cleanup");
+
+        Assert.False(step.Success);
+        Assert.True(Directory.Exists(Path.Combine(_directory, "state")));
     }
 }
 

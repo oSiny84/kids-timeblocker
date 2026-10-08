@@ -43,6 +43,8 @@ Windows 10 / 11 에서 **시간대별로 YouTube / Roblox 접근을 차단**하�
 2. **`install.bat`** 더블클릭 실행
    - "게시자를 확인할 수 없습니다" 같은 경고가 뜨면 **"예" / "실행"** 선택
    - Bot Token, User ID 를 물어보면 2번에서 받은 값을 붙여넣기
+   - **"쇼츠도 차단할까요?"** 를 물어봅니다 — 유튜브 쇼츠만 막고 일반 영상은 그대로
+     두고 싶으면 `Y`. 나중에 텔레그램에서 켜고 끌 수 있으니 모르겠으면 그냥 Enter
 3. 설치가 끝나면 자동으로 점검(`doctor`)이 실행됩니다
 
 ### 4) 잘 됐는지 확인
@@ -57,7 +59,7 @@ status
 
 ### 5) 자주 쓰는 명령
 
-이것만 알아도 웬만한 건 다 됩니다. 대상은 `youtube` / `roblox` / `all` 로 바꿔서 씁니다.
+이것만 알아도 웬만한 건 다 됩니다. 대상은 `youtube` / `roblox` / `shorts` / `all` 로 바꿔서 씁니다.
 
 | 명령 | 뜻 |
 |---|---|
@@ -67,8 +69,12 @@ status
 | `unblock youtube` | YouTube 를 스케줄 무시하고 계속 열어두기 |
 | `youtube 30` | 30분만 허용 (시간 지나면 자동으로 원래 상태로) |
 | `schedule mon-fri 21:00 07:00` | 평일 21시 ~ 다음날 7시 차단 |
+| `block shorts` | 쇼츠만 막기 (일반 YouTube 영상은 그대로) |
 | `msg 밥 먹고 하자` | PC 화면에 메시지 띄우기 |
 | `help` (또는 `list`) | 전체 명령 목록 |
+
+`block shorts` 는 **필요한 브라우저 정책을 알아서 함께 켭니다.** 설정파일을 고칠 필요가 없습니다.
+설치할 때 `install.bat` 이 물어보기도 합니다. 자세한 내용은 10장 "쇼츠만 차단" 을 보세요.
 
 명령과 예시를 더 자세히 보려면 아래 **"8. Telegram 명령어"** 섹션을 참고하세요.
 
@@ -94,11 +100,12 @@ status
       │ Policy Engine   │
       │ DNS Block       │
       │ Firewall Block  │
+      │ Browser Policy  │
       └─────────────────┘
                │
                ▼
-        YouTube / Roblox
-           접근 제어
+     YouTube / Roblox / Shorts
+            접근 제어
 ```
 
 PC 에는 외부 포트를 열지 않습니다. 서비스가 Telegram 으로 **outbound long polling** 만 합니다.
@@ -301,21 +308,23 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall-service.ps1 -RemoveDa
 2. 저장된 Original DNS 복원      <- 인터넷을 가장 먼저 살린다
 3. TimeBlocker hosts 영역 제거
 4. TimeBlocker 방화벽 규칙 제거
-5. DNS 캐시 비우기
-6. Windows Service 제거
-7. 남은 상태파일 제거
+5. 브라우저 정책 원복
+6. DNS 캐시 비우기
+7. Windows Service 제거
+8. 남은 상태파일 제거
 ```
 
 **중간 단계가 실패해도 나머지는 계속 수행하고**, 마지막에 전체 결과를 출력합니다.
 
 ```
-Permit cleanup    : OK
-DNS restore       : OK (1개: Wi-Fi)
-Hosts cleanup     : OK
-Firewall cleanup  : OK (1개 제거)
-DNS cache flush   : OK
-State cleanup     : OK
-Service removal   : OK
+Permit cleanup         : OK
+DNS restore            : OK (1개: Wi-Fi)
+Hosts cleanup          : OK
+Firewall cleanup       : OK (1개 제거)
+Browser policy restore : OK
+DNS cache flush        : OK
+State cleanup          : OK
+Service removal        : OK
 
 System restored successfully.
 ```
@@ -338,7 +347,10 @@ System partially restored. 1 step(s) failed - 위 조치를 확인하세요.
 - hosts 는 `# TIMEBLOCKER BEGIN ~ END` **마커 구간만** 지웁니다. 기존 내용은 건드리지 않습니다.
 - 방화벽은 `TimeBlocker_` 로 시작하는 **우리 규칙 이름만** 지웁니다. 사용자의 다른 규칙은 그대로 둡니다.
 - DNS 는 저장된 **원래 값**으로 되돌립니다. 무조건 DHCP 로 바꾸지 않으므로, 수동 DNS 를 쓰던 환경의 설정이 보존됩니다.
-- 어댑터 DNS 복구가 끝나지 않았으면 상태파일(백업)을 **지우지 않습니다.** 복구 정보를 잃지 않기 위해서입니다.
+- 브라우저 정책도 저장된 **원래 값**으로만 되돌립니다. 백업이 없으면 레지스트리를 아예
+  건드리지 않습니다. 부모가 직접 넣어둔 `URLBlocklist` 항목은 그대로 보존됩니다.
+- 어댑터 DNS 복구나 브라우저 정책 복구가 끝나지 않았으면 상태파일(백업)을 **지우지 않습니다.**
+  복구 정보를 잃지 않기 위해서입니다.
 
 ---
 
@@ -415,8 +427,9 @@ Service     : RUNNING
 Current Time:
 2026-09-22 21:20
 
-YouTube     : BLOCKED
-Roblox      : BLOCKED
+YouTube     : BLOCKED (block · 항상 막음)
+Shorts      : BLOCKED (auto · 지금은 차단 시간)
+Roblox      : BLOCKED (auto · 지금은 차단 시간)
 
 Schedule:
 Mon-Thu 21:00 ~ 07:00
@@ -432,6 +445,9 @@ DNS Mode      : ProxyWithHostsFallback
 DNS Proxy     : RUNNING
 Fallback      : NOT ACTIVE
 Upstream DNS  : 1.1.1.1, 8.8.8.8
+
+Browser Policy:
+chrome, edge (시크릿 차단 / 게스트 차단 / DoH 끔)
 ```
 
 DNS 프록시가 뜨지 못한 경우에는 이 부분이 이렇게 보입니다.
@@ -466,6 +482,7 @@ $env:TIMEBLOCKER_DATA = "D:\temp\tbdata"
 | `targets` | | 대상별 상태 (auto / block / unblock) |
 | `schedule` | `sch` | 요일별 차단 시간 |
 | `domains youtube` | | 차단 도메인 목록 |
+| `policy` | `bp` | 쇼츠 차단(브라우저 정책) 상태 |
 | `maxpermit` | | 최대 허용 시간 |
 | `admin list` | | 등록된 관리자 User ID |
 | `ping` | | 생존 확인 + uptime |
@@ -516,13 +533,18 @@ schedule default 21:00 07:00     전체 요일 기본값
 | 잠금 | `block youtube` | 스케줄과 무관하게 계속 막힘 |
 | 열림 | `unblock youtube` | 스케줄과 무관하게 계속 열림 |
 
-대상은 `youtube` / `roblox` / `all` 입니다. 대상을 생략하면 전체에 적용됩니다
+대상은 `youtube` / `roblox` / `shorts` / `all` 입니다. 대상을 생략하면 전체에 적용됩니다
 (`block` = `block all`).
+
+`shorts` 는 **쇼츠만** 막습니다. 일반 YouTube 영상은 그대로 볼 수 있습니다.
+차단 방식이 완전히 달라서(브라우저 정책) 한계도 다릅니다 — "쇼츠만 차단" 절을 보세요.
+`block shorts` 는 필요한 정책을 알아서 함께 켜줍니다.
 
 `targets` 로 확인하면 이렇게 보입니다.
 
 ```
 YouTube : block   잠금 (항상 막음)
+Shorts  : auto    자동 (스케줄대로)
 Roblox  : auto    자동 (스케줄대로)
 ```
 
@@ -530,6 +552,7 @@ Roblox  : auto    자동 (스케줄대로)
 
 ```
 YouTube     : BLOCKED (block · 항상 막음)
+Shorts      : BLOCKED (auto · 지금은 차단 시간)
 Roblox      : ALLOW   (auto · 지금은 차단 시간 아님)
 ```
 
@@ -649,6 +672,40 @@ Adapter DNS      : Wi-Fi=127.0.0.1
 어댑터 DNS 를 원래대로 되돌리고, 차단은 hosts 방식으로 계속 유지합니다.
 프록시 방식으로 돌아가려면 `reload` 를 실행하세요.
 
+### 쇼츠 차단 켜고 끄기
+
+```
+policy             지금 상태 (어떤 브라우저에 적용됐는지, 무엇을 막는지)
+policy on          기능 켜기
+policy off         기능 끄기 (바꿔놓은 레지스트리 정책을 원래대로 되돌린다)
+```
+
+`policy` 응답 예:
+
+```
+Browser Policy : ON
+chrome, edge (시크릿 차단 / 게스트 차단 / DoH 끔)
+
+쇼츠 차단은 이 기능으로만 동작합니다.
+Shorts 상태    : block (잠금 (항상 막음))
+
+차단 URL:
+  youtube.com/shorts
+  youtube.com/youtubei/v1/reel/
+
+함께 막는 우회 경로:
+  시크릿 모드  : 차단
+  게스트 모드  : 차단
+  브라우저 DoH : 차단
+  확장 설치    : 허용
+
+끄려면: policy off
+```
+
+**`policy off` 는 바꿔놓은 레지스트리 정책을 원래 값으로 되돌립니다.**
+`Shorts` 의 상태(block / auto)는 건드리지 않으므로, 다시 `policy on` 하면
+전에 정한 대로 돌아갑니다.
+
 ### 자동 진단 (doctor)
 
 문제가 생겼을 때 원인을 빠르게 찾기 위한 종합 점검입니다.
@@ -743,6 +800,20 @@ TimeBlocker.Admin.exe youtube 30
 TimeBlocker.Admin.exe schedule mon 21:00 07:00
 TimeBlocker.Admin.exe lock
 TimeBlocker.Admin.exe logs 200
+```
+
+설치 시점에만 쓰는 로컬 전용 명령은 서비스 실행파일이 직접 받습니다.
+(Telegram 으로 바꿀 수 없거나, 서비스가 멈춰 있어도 동작해야 하는 것들)
+
+```powershell
+TimeBlocker.Service.exe set-token <BotToken>
+TimeBlocker.Service.exe set-admin <TelegramUserId>
+TimeBlocker.Service.exe enable-shorts     # 쇼츠 차단 켜기 (= policy on + block shorts)
+TimeBlocker.Service.exe disable-shorts    # 쇼츠 차단 끄기
+TimeBlocker.Service.exe show-config
+TimeBlocker.Service.exe doctor
+TimeBlocker.Service.exe cleanup
+TimeBlocker.Service.exe dns-restore
 ```
 
 - CLI 는 핵심 로직을 직접 실행하지 않습니다. **Named Pipe 로 서비스에 명령을 전달만** 합니다.
@@ -1059,6 +1130,179 @@ Windows 정식 API 만 사용합니다. 프로세스를 숨기거나 보안 기�
 "알림 받기"와 "답장 보내기" 둘뿐입니다. 설정 변경이나 차단 해제는 이 통로에 존재하지 않습니다.
 도배를 막기 위해 답장은 10초 쿨다운과 시간당 20건 제한이 걸려 있습니다.
 
+### 쇼츠만 차단 — 브라우저 정책
+
+**쇼츠는 DNS 로 막을 수 없습니다.** 쇼츠와 일반 영상은 같은 `youtube.com`,
+같은 `googlevideo.com`, 심지어 같은 TLS 연결을 씁니다. DNS 차단은 도메인 단위이므로
+`youtube.com` 을 막으면 유튜브 전체가 막히고, 안 막으면 쇼츠도 열립니다.
+경로(`/shorts/...`)를 구분할 수 있는 수단은 **브라우저 정책** 하나뿐입니다.
+
+그래서 `shorts` 대상만 다른 길로 갑니다.
+
+| 대상 | 차단 수단 |
+|---|---|
+| YouTube / Roblox | DNS(도메인) + 방화벽 + 프로세스 종료 |
+| Shorts | 브라우저 정책 (HKLM 레지스트리의 `URLBlocklist`) |
+
+#### 켜는 방법
+
+**기본값은 꺼짐입니다.** 레지스트리 정책을 건드리는 기능이라 명시적으로 켜야 합니다.
+켜는 길은 두 가지이고, **어느 쪽이든 설정파일을 직접 고칠 필요는 없습니다.**
+
+**1) 설치할 때** — `install.bat` 이 물어봅니다.
+
+```
+ 쇼츠도 차단할까요? (Y/N, 기본 N):
+```
+
+`Y` 를 누르면 기능이 켜지고 쇼츠가 상시 차단으로 설정됩니다.
+
+**2) 나중에 텔레그램으로**
+
+```
+block shorts      쇼츠를 항상 차단 (필요한 정책도 함께 켜준다)
+auto shorts       차단 시간대에만 쇼츠 차단 (정책도 함께 켜준다)
+unblock shorts    쇼츠 차단 안 함
+shorts 30         30분만 쇼츠 열어주기
+
+policy            지금 상태 보기
+policy on         기능만 켜기
+policy off        기능 끄기 (레지스트리 정책을 원래대로 되돌린다)
+```
+
+`block shorts` 와 `auto shorts` 는 **필요한 브라우저 정책을 알아서 함께 켭니다.**
+쇼츠는 그 정책 없이는 전혀 막히지 않으므로, 대상을 직접 지정해 막으라고 한 것을
+동의로 봅니다. 응답에 무엇이 함께 켜졌는지(시크릿 / 게스트 / DoH 차단) 적어줍니다.
+
+> `block all` 은 정책을 켜지 않습니다. PC 전체에 적용되는 변경을 포괄 명령의
+> 부수효과로 일으키지 않기 위한 것입니다. 대신 응답에 쇼츠가 아직 안 막힌다는
+> 사실과 `policy on` 안내가 붙습니다.
+
+**확인하는 방법**
+
+`status` 의 `Browser Policy` 줄, `policy` 명령, `doctor` 의 `Browser policy` 항목으로
+실제로 적용됐는지 확인할 수 있습니다. 브라우저에서 `chrome://policy` 를 열어
+`URLBlocklist` 가 들어와 있는지 직접 봐도 됩니다.
+
+**설치 후 로컬에서 바꾸려면** (텔레그램을 쓸 수 없을 때)
+
+```powershell
+"C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" enable-shorts
+"C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" disable-shorts
+```
+
+#### 무엇이 막히고 무엇이 안 막히는가
+
+기본으로 들어가는 패턴은 두 개입니다.
+
+```
+youtube.com/shorts            쇼츠 시청 페이지
+youtube.com/youtubei/v1/reel/ 쇼츠 피드가 다음 영상을 받아오는 내부 API
+```
+
+호스트만 적으면 하위 도메인까지 포함되므로, `youtube.com/shorts` 하나로
+`www.youtube.com/shorts/<id>` 와 `m.youtube.com/shorts/<id>` 가 함께 걸립니다.
+
+| 상황 | 결과 |
+|---|---|
+| 주소창에 쇼츠 주소 직접 입력 | 막힘 |
+| 쇼츠 링크를 눌러서 새로 열기 / 새로고침 | 막힘 |
+| 일반 YouTube 영상 (`/watch`) | **그대로 됨** (의도한 동작) |
+| 유튜브 홈에서 쇼츠 썸네일을 눌러서 들어가기 | **페이지 로드가 없으면 안 막힘** |
+| 홈 화면의 쇼츠 섹션 자체 | 그대로 보임 |
+
+마지막 두 줄이 이 방식의 한계입니다. 유튜브는 화면 안에서 JS 로 주소만 바꾸는
+방식(SPA)으로 이동하는데, `URLBlocklist` 는 **실제 페이지 로드**를 막는 정책이라
+그 경로를 잡지 못합니다. Google 과 Microsoft 문서가 이 한계를 명시하고 있습니다.
+그래서 쇼츠 피드가 쓰는 내부 API 를 함께 막아 "영상이 넘어가지 않게" 만듭니다.
+완전한 차단은 아니고, 실제로 얼마나 새는지는 **아이 PC 에서 직접 확인해야 합니다.**
+
+완전히 막으려면 강제 설치 확장이 필요합니다. 그건 이 기능의 범위 밖입니다.
+
+#### 우회 경로를 함께 막습니다
+
+`URLBlocklist` 만 켜면 빠져나갈 길이 여러 개 남습니다. 같은 설정에서 함께 막습니다.
+
+| 설정 | 기본값 | 막는 것 |
+|---|---|---|
+| `DisableIncognito` | `true` | 시크릿 모드 (`IncognitoModeAvailability=1`) |
+| `DisableGuestMode` | `true` | 게스트 모드 (별도 프로필이라 확장/정책이 약함) |
+| `DisableDnsOverHttps` | `true` | 브라우저 DoH — **켜져 있으면 YouTube/Roblox DNS 차단까지 우회됩니다** |
+| `BlockExtensionInstalls` | `false` | VPN·프록시 확장 설치 (`ExtensionInstallBlocklist=["*"]`) |
+
+**이 항목들은 차단 시간대와 무관하게 기능이 켜진 동안 계속 적용됩니다.**
+차단 시간에만 시크릿 모드를 막으면, 차단 시간이 되기 전에 시크릿 창을 미리 열어두는
+우회가 가능하기 때문입니다.
+
+`BlockExtensionInstalls` 는 이미 쓰고 있는 확장까지 멈추게 할 수 있어 기본은 꺼짐입니다.
+켤 때는 `ExtensionAllowlist` 에 남겨둘 확장 ID 를 적으세요.
+
+#### 다른 브라우저
+
+**정책은 브라우저마다 따로입니다.** 크롬/엣지에 걸어도 다른 브라우저로 옮기면 효과가 없습니다.
+
+| 브라우저 | 정책 키 | 상태 |
+|---|---|---|
+| Chrome | `SOFTWARE\Policies\Google\Chrome` | 공식 문서로 확인 |
+| Edge | `SOFTWARE\Policies\Microsoft\Edge` | 공식 문서로 확인 |
+| Brave | `SOFTWARE\Policies\BraveSoftware\Brave-Browser` | **추정 — 확인 필요** |
+| Whale (네이버 웨일) | `SOFTWARE\Policies\Naver\Whale` | **추정 — 확인 필요** |
+| Opera | `SOFTWARE\Policies\Opera Software\Opera` | **추정 — 확인 필요** |
+
+기본값은 확인된 `chrome` / `edge` 둘뿐입니다. 추정 경로를 기본값에 넣으면
+"막은 줄 알았는데 안 막힌" 상태가 조용히 생기기 때문입니다.
+
+웨일처럼 추정 경로인 브라우저를 쓰려면 **먼저 확인하세요.**
+
+1. `Browsers` 에 `"whale"` 을 추가하고 서비스를 재시작
+2. 웨일에서 `whale://policy` 를 열어 `URLBlocklist` 가 보이는지 확인
+3. 안 보이면 `regedit` 에서 `HKLM\SOFTWARE\Policies` 아래를 찾아 실제 경로를 확인하고
+   `RegistryKeyOverrides` 로 지정
+
+```jsonc
+"BrowserPolicy": {
+  "Enabled": true,
+  "Browsers": [ "chrome", "edge", "whale" ],
+  "RegistryKeyOverrides": {
+    "whale": "SOFTWARE\\Policies\\Naver\\Whale"
+  }
+}
+```
+
+Firefox 는 Chromium 계열이 아니어서 이 방식이 전혀 통하지 않습니다
+(`policies.json` 이라는 별도 수단을 씁니다). 아이 PC 에 쓰지 않을 브라우저는
+설치하지 않는 편이 확실합니다.
+
+#### 원래 설정을 지키는 방식
+
+레지스트리를 건드리므로 어댑터 DNS 와 똑같은 안전 절차를 씁니다.
+
+```
+1. 쓰기 전에 원본 값을 state\browser-policy.json 에 저장
+   (저장 실패 시 레지스트리를 건드리지 않음 — 되돌릴 수 없는 변경을 남기지 않는다)
+2. 이미 백업이 있는 브라우저는 다시 읽지 않음
+   (우리가 쓴 값을 "원본"으로 덮으면 영구히 복구 불가)
+3. 부모가 원래 넣어둔 URLBlocklist 항목은 유지하고 우리 항목만 더함
+4. 차단이 풀리면 우리 항목만 빼고, 원래 없던 키는 키째로 삭제
+```
+
+- `BrowserPolicy.Enabled` 를 `false` 로 되돌리면 **다음 평가 주기에 스스로 원래대로 복구**합니다.
+- `cleanup` / 제거 시에도 복구합니다. (`Browser policy restore` 단계)
+- 백업이 없으면 레지스트리를 **건드리지 않습니다.** 추측으로 지우면 남의 설정을 날립니다.
+- 누군가 정책을 레지스트리에서 지워도 다음 주기에 다시 채워 넣습니다.
+  (내용이 같으면 쓰지 않으므로 평상시 비용은 거의 없습니다)
+
+#### 아이가 정책을 지울 수 있나
+
+**지울 수 없습니다.** `HKLM` 쓰기에는 관리자 권한이 필요하므로,
+아이 계정이 **표준 사용자**이면 레지스트리를 고칠 수 없습니다.
+(이 전제가 깨지면 TimeBlocker 전체가 무의미합니다 — 5장 참고)
+
+브라우저의 확장/정책 화면에는 "관리자가 설치했습니다" 로 **보이기는 합니다.**
+보이는 것과 지울 수 있는 것은 다릅니다.
+
+---
+
 ### DNS 캐시
 
 차단/허용 상태가 실제로 **바뀐 경우에만** 캐시를 비웁니다.
@@ -1103,6 +1347,28 @@ Windows 정식 API 만 사용합니다. 프로세스를 숨기거나 보안 기�
     "UseFirewallBlocking": true,
     "Domains": [ "roblox.com", "rbxcdn.com" ],
     "ProcessNames": [ "RobloxPlayerBeta.exe", "RobloxStudioBeta.exe" ]
+  },
+  "Shorts": {
+    // 쇼츠만 차단. DNS 로는 경로를 구분할 수 없으므로 브라우저 정책만 사용한다.
+    "Mode": "Schedule",                   // block shorts / auto shorts / unblock shorts
+    "UseDnsBlocking": false,              // 켜면 youtube.com 전체가 막힌다. 켜지 말 것
+    "UseFirewallBlocking": false,
+    "UseBrowserPolicyBlocking": true,
+    "BlockedUrlPatterns": [
+      "youtube.com/shorts",               // 하위 도메인(www / m)까지 함께 걸린다
+      "youtube.com/youtubei/v1/reel/"     // 쇼츠 피드가 다음 영상을 받아오는 내부 API
+    ]
+  },
+  "BrowserPolicy": {
+    // 기본 꺼짐. 레지스트리 정책을 건드리므로 명시적으로 켜야 한다.
+    "Enabled": false,
+    "Browsers": [ "chrome", "edge" ],     // 확인된 경로만 기본값
+    "RegistryKeyOverrides": {},           // 내장 경로가 틀렸을 때 여기서 바로잡는다
+    "DisableIncognito": true,             // 시크릿 모드로 빠져나가는 것을 막는다
+    "DisableGuestMode": true,
+    "DisableDnsOverHttps": true,          // 켜져 있으면 DNS 차단 전체가 우회된다
+    "BlockExtensionInstalls": false,      // VPN/프록시 확장 차단. 부작용이 커서 기본 꺼짐
+    "ExtensionAllowlist": []
   },
   "TemporaryPermit": { "MaxMinutes": 120, "MinMinutes": 1 },
   "Telegram": {
@@ -1473,6 +1739,15 @@ Telegram 과 완전히 같은 명령 처리기를 사용하므로 동작이 동�
 - **DoH(DNS over HTTPS) 를 쓰면 DNS 차단이 우회됩니다.** Chrome / Edge / Firefox 의
   "보안 DNS" 기능을 끄거나, 그룹 정책으로 비활성화해야 합니다.
 - **VPN / 프록시 / 모바일 테더링** 으로 우회할 수 있습니다. 이 프로그램의 범위를 벗어납니다.
+- **쇼츠 차단(`shorts`)은 완전하지 않습니다.** 브라우저 정책의 `URLBlocklist` 는 실제 페이지
+  로드만 막습니다. 유튜브 안에서 JS 로 주소만 바꾸는 이동(SPA)은 걸리지 않으므로,
+  홈에서 쇼츠 썸네일을 눌러 들어가는 경로가 새어나갈 수 있습니다.
+  쇼츠 피드가 쓰는 내부 API 를 함께 막아 보완하지만 100% 는 아니고,
+  홈 화면의 쇼츠 섹션도 사라지지 않습니다. 완전한 차단에는 강제 설치 확장이 필요합니다.
+- **브라우저 정책은 브라우저마다 따로 적용됩니다.** 정책을 걸지 않은 브라우저로 옮기면
+  쇼츠 차단과 DoH 차단이 모두 무력화됩니다. `chrome` / `edge` 외의 경로는 확인되지 않은
+  추정값이므로 `whale://policy` 같은 정책 페이지로 직접 확인해야 합니다.
+  Firefox 는 Chromium 계열이 아니어서 이 방식이 통하지 않습니다.
 - **관리자 계정을 가진 사용자는 언제든 서비스를 멈출 수 있습니다.**
   자녀 계정을 반드시 **표준 사용자**로 만들어야 의미가 있습니다.
 - DNS 프록시는 **UDP 질의만** 처리합니다. TCP DNS 질의는 프록시를 거치지 않습니다.
@@ -1484,6 +1759,11 @@ Telegram 과 완전히 같은 명령 처리기를 사용하므로 동작이 동�
 - 차단/허용 반영은 최대 `EvaluationIntervalSeconds`(기본 10초) 만큼 늦어질 수 있습니다.
   Telegram 명령으로 준 허용은 즉시 반영됩니다.
 - 브라우저가 이미 열어둔 연결이나 자체 DNS 캐시 때문에 체감 반영이 늦을 수 있습니다.
+  **이미 재생 중인 영상은 즉시 끊기지 않습니다.** DNS 차단은 앞으로의 주소 질의만 막고,
+  이미 맺어진 연결과 미리 받아둔 영상은 그대로 흐릅니다. 브라우저를 다시 시작하면 즉시 막힙니다.
+- **브라우저 정책 변경은 브라우저가 정책을 다시 읽을 때 반영됩니다.** 레지스트리에는 즉시
+  들어가지만, 열려 있는 브라우저가 그것을 인식하기까지 시간이 걸릴 수 있습니다.
+  바로 확인하려면 브라우저를 다시 시작하거나 `chrome://policy` 에서 정책 다시 로드를 누르세요.
 - **서비스를 중지해도 hosts / 방화벽 차단은 유지됩니다.** 의도된 동작입니다.
   (서비스를 끄는 것만으로 차단이 풀리면 의미가 없습니다.) 완전히 해제하려면
   `TimeBlocker.Service.exe cleanup` 을 실행하세요.

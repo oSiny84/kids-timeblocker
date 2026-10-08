@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using TimeBlocker.Service.Blocking.BrowserPolicy;
 using TimeBlocker.Service.Blocking.Dns;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Core;
@@ -26,6 +27,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
     private readonly IDnsSelfTest _selfTest;
     private readonly RobloxLocator _locator;
     private readonly ProcessEnforcer _processEnforcer;
+    private readonly IBrowserPolicyManager _browserPolicy;
 
     /// <summary>실행파일을 못 찾았다는 경고를 마지막으로 남긴 시각. 로그 폭주를 막는다.</summary>
     private readonly Dictionary<BlockTarget, DateTimeOffset> _noExecutableWarned = new();
@@ -72,6 +74,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         IDnsSelfTest selfTest,
         RobloxLocator locator,
         ProcessEnforcer processEnforcer,
+        IBrowserPolicyManager browserPolicy,
         ILogger<BlockingCoordinator> logger)
     {
         _configStore = configStore;
@@ -84,6 +87,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         _selfTest = selfTest;
         _locator = locator;
         _processEnforcer = processEnforcer;
+        _browserPolicy = browserPolicy;
         _logger = logger;
     }
 
@@ -130,6 +134,9 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         }
     }
 
+    /// <summary>status 명령에서 보여줄 브라우저 정책 상태.</summary>
+    public string BrowserPolicyDescription => _browserPolicy.Describe(_configStore.Current);
+
     /// <summary>마지막 판정 결과. 상태 조회용.</summary>
     public IReadOnlyList<AccessDecision> LastDecisions { get; private set; } = Array.Empty<AccessDecision>();
 
@@ -175,6 +182,19 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
                 var normalized = domain.Trim().TrimEnd('.').ToLowerInvariant();
                 if (normalized.Length > 0) domainsToBlock.Add(normalized);
             }
+        }
+
+        // 1-1. 브라우저 정책(URLBlocklist)으로 막아야 할 URL 패턴 모으기
+        //      DNS 는 도메인 단위라 경로(/shorts)를 구분할 수 없다. 그 역할을 여기서 맡는다.
+        var urlPatternsToBlock = new List<string>();
+        foreach (var decision in decisions)
+        {
+            if (!decision.IsBlocked) continue;
+
+            var settings = config.GetTarget(decision.Target);
+            if (!settings.UseBrowserPolicyBlocking) continue;
+
+            urlPatternsToBlock.AddRange(settings.BlockedUrlPatterns);
         }
 
         // 2. 방화벽으로 막아야 할 실행파일 모으기
@@ -224,7 +244,19 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
             _logger.LogError(ex, "프로세스 단속 중 오류가 발생했습니다. 다음 주기에 다시 시도합니다.");
         }
 
-        var signature = BuildSignature(config, domainsToBlock, executablesToBlock);
+        // 3-2. 브라우저 정책을 적용한다.
+        //      signature 비교보다 앞에 두는 이유: 누군가 레지스트리에서 정책을 지웠을 때
+        //      다음 주기에 스스로 다시 채워 넣어야 한다. (내용이 같으면 쓰지 않으므로 비용은 거의 없다)
+        try
+        {
+            _browserPolicy.Apply(config, urlPatternsToBlock);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "브라우저 정책 적용 중 오류가 발생했습니다. 다음 주기에 다시 시도합니다.");
+        }
+
+        var signature = BuildSignature(config, domainsToBlock, executablesToBlock, urlPatternsToBlock);
         if (signature == _appliedSignature && !_hostsFallbackActive)
         {
             return; // 변경 없음 - 시스템을 건드리지 않는다
@@ -779,13 +811,18 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
     private static string BuildSignature(
         TimeBlockerConfig config,
         SortedSet<string> domains,
-        Dictionary<string, List<string>> executables)
+        Dictionary<string, List<string>> executables,
+        IReadOnlyCollection<string> urlPatterns)
     {
         var parts = new List<string>
         {
             $"mode={config.Dns.Mode}",
             $"dns={config.Dns.Enabled}",
-            "domains=" + string.Join(',', domains)
+            "domains=" + string.Join(',', domains),
+
+            // 브라우저 정책은 매 주기 직접 적용하므로 여기서는 상태 설명을 갱신하는 용도로만 쓴다.
+            $"browserPolicy={config.BrowserPolicy.Enabled}",
+            "urls=" + string.Join(',', urlPatterns.OrderBy(p => p, StringComparer.Ordinal))
         };
 
         foreach (var (rule, paths) in executables.OrderBy(kv => kv.Key, StringComparer.Ordinal))
@@ -811,6 +848,8 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         {
             parts.Add("Firewall");
         }
+
+        if (config.BrowserPolicy.Enabled) parts.Add("Browser Policy");
 
         return parts.Count == 0 ? "Disabled" : string.Join(" + ", parts);
     }

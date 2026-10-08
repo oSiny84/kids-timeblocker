@@ -108,6 +108,109 @@ public sealed class TargetSettings
 
     /// <summary>자동 탐색에 더해 수동으로 지정한 실행파일 전체 경로.</summary>
     public List<string> ExtraExecutablePaths { get; set; } = new();
+
+    /// <summary>
+    /// 브라우저 정책(URLBlocklist)으로 막을지.
+    ///
+    /// DNS 차단은 도메인 단위라 경로(/shorts)를 구분할 수 없다.
+    /// "유튜브는 되고 쇼츠만 막기" 처럼 경로 단위 차단이 필요한 대상에 쓴다.
+    /// </summary>
+    public bool UseBrowserPolicyBlocking { get; set; }
+
+    /// <summary>
+    /// 차단할 URL 패턴. Chromium URLBlocklist 필터 형식을 그대로 쓴다.
+    ///
+    /// 호스트만 적으면 하위 도메인까지 포함되고, 경로는 접두사로 비교된다.
+    /// 즉 youtube.com/shorts 하나로 www / m 하위 도메인의 /shorts/&lt;id&gt; 까지 걸린다.
+    /// 끝에 와일드카드(*)는 쓸 수 없고 경로는 대소문자를 구분한다.
+    ///
+    /// 주의: 경로 없이 호스트만 적으면 그 사이트 전체가 막힌다.
+    /// </summary>
+    public List<string> BlockedUrlPatterns { get; set; } = new();
+
+    /// <summary>
+    /// Shorts 대상의 기본값.
+    ///
+    /// DNS / 방화벽 / 프로세스 종료는 모두 쓰지 않는다. 경로 단위 차단이 필요하므로
+    /// 브라우저 정책만 사용한다.
+    ///
+    /// 기본 상태는 다른 대상과 같은 Schedule 이다.
+    /// 쇼츠를 상시 차단하려면 block shorts, 시간대만 막으려면 그대로 두면 된다.
+    /// 어느 쪽이든 BrowserPolicy.Enabled 가 켜져 있어야 실제로 적용된다.
+    /// 그 기능은 설치 중 질문이나 텔레그램 'policy on' / 'block shorts' 로 켜진다.
+    /// 설정파일을 직접 고치게 만들지 않는다. (이 프로그램은 대상 PC 에 설정 화면을 두지 않는다)
+    /// </summary>
+    public static TargetSettings CreateShortsDefault() => new()
+    {
+        Mode = BlockMode.Schedule,
+        UseDnsBlocking = false,
+        UseFirewallBlocking = false,
+        TerminateProcesses = false,
+        UseBrowserPolicyBlocking = true,
+        BlockedUrlPatterns = new List<string>
+        {
+            // 쇼츠 시청 페이지. 호스트만 적었으므로 www / m 하위 도메인도 함께 걸린다.
+            "youtube.com/shorts",
+
+            // 쇼츠 피드가 다음 영상을 받아오는 내부 API.
+            // 이걸 막으면 페이지 이동 없이 넘기는 경로(SPA)도 영상을 받지 못한다.
+            "youtube.com/youtubei/v1/reel/"
+        }
+    };
+}
+
+/// <summary>
+/// 브라우저 정책(HKLM 레지스트리)으로 하는 차단과 우회 봉쇄 설정.
+///
+/// URLBlocklist 는 경로 단위 차단을 할 수 있는 유일한 수단이지만,
+/// 그것만 켜면 시크릿 모드 / 게스트 모드 / 다른 브라우저로 쉽게 빠져나갈 수 있다.
+/// 그래서 우회 경로를 함께 막는 항목을 같은 곳에 둔다.
+///
+/// 레지스트리를 건드리므로 기본값은 꺼짐이다. 켜기 전에 README 를 읽어야 한다.
+/// </summary>
+public sealed class BrowserPolicySettings
+{
+    /// <summary>기본 꺼짐. 켜면 아래 항목이 HKLM 정책으로 적용된다.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// 정책을 적용할 브라우저 식별자.
+    /// chrome / edge 는 공식 문서로 확인된 경로를 쓴다.
+    /// brave / whale / opera 는 추정 경로이므로 기본값에 넣지 않았다.
+    /// </summary>
+    public List<string> Browsers { get; set; } = new() { "chrome", "edge" };
+
+    /// <summary>
+    /// 내장 경로가 틀렸거나 목록에 없는 브라우저를 쓸 때 지정한다.
+    /// 예: { "whale": "SOFTWARE\Policies\Naver\Whale" }
+    /// </summary>
+    public Dictionary<string, string> RegistryKeyOverrides { get; set; } = new();
+
+    /// <summary>
+    /// 시크릿 모드를 막을지.
+    ///
+    /// 끄면 안 된다에 가깝다. 강제 설치한 확장은 시크릿 창에서 기본적으로 동작하지 않고,
+    /// URLBlocklist 는 시크릿에서도 적용되지만 정책 우회 수단을 하나 열어두는 셈이 된다.
+    /// </summary>
+    public bool DisableIncognito { get; set; } = true;
+
+    /// <summary>게스트 모드를 막을지. 게스트 창은 별도 프로필이라 확장이 없다.</summary>
+    public bool DisableGuestMode { get; set; } = true;
+
+    /// <summary>
+    /// 브라우저의 DNS over HTTPS 를 끌지.
+    /// 켜져 있으면 DNS 차단 자체가 우회된다. (YouTube / Roblox 차단에도 영향)
+    /// </summary>
+    public bool DisableDnsOverHttps { get; set; } = true;
+
+    /// <summary>
+    /// 확장 설치를 전부 막을지. (VPN / 프록시 확장으로 우회하는 것을 막는다)
+    /// 이미 쓰고 있는 확장까지 멈추게 할 수 있어 기본은 꺼짐이다.
+    /// </summary>
+    public bool BlockExtensionInstalls { get; set; }
+
+    /// <summary>BlockExtensionInstalls 가 켜졌을 때도 허용할 확장 ID.</summary>
+    public List<string> ExtensionAllowlist { get; set; } = new();
 }
 
 public sealed class TemporaryPermitSettings
@@ -185,6 +288,14 @@ public sealed class TimeBlockerConfig
 
     public TargetSettings Roblox { get; set; } = new();
 
+    /// <summary>
+    /// YouTube Shorts 전용 대상. 브라우저 정책(URLBlocklist)으로만 막는다.
+    /// 1.2 이하 설정파일에는 이 구간이 없으므로 Normalize 에서 기본값을 채운다.
+    /// </summary>
+    public TargetSettings Shorts { get; set; } = TargetSettings.CreateShortsDefault();
+
+    public BrowserPolicySettings BrowserPolicy { get; set; } = new();
+
     public TemporaryPermitSettings TemporaryPermit { get; set; } = new();
 
     public TelegramSettings Telegram { get; set; } = new();
@@ -199,6 +310,7 @@ public sealed class TimeBlockerConfig
     {
         BlockTarget.YouTube => YouTube,
         BlockTarget.Roblox => Roblox,
+        BlockTarget.Shorts => Shorts,
         _ => throw new ArgumentOutOfRangeException(nameof(target), target, "실제 대상만 조회할 수 있습니다.")
     };
 
@@ -247,7 +359,8 @@ public sealed class TimeBlockerConfig
                     "RobloxStudioBeta.exe",
                     "RobloxPlayerLauncher.exe"
                 }
-            }
+            },
+            Shorts = TargetSettings.CreateShortsDefault()
         };
     }
 
@@ -282,9 +395,26 @@ public sealed class TimeBlockerConfig
         Roblox.ProcessNames ??= new List<string>();
         Roblox.ExtraExecutablePaths ??= new List<string>();
 
+        // Shorts 구간이 아예 없는 설정파일(1.2 이하)은 기본값을 채운다.
+        // 구간이 있으면 비어 있어도 그대로 존중한다. (사용자가 비워둔 것일 수 있다)
+        Shorts ??= TargetSettings.CreateShortsDefault();
+        Shorts.Domains ??= new List<string>();
+        Shorts.ProcessNames ??= new List<string>();
+        Shorts.ExtraExecutablePaths ??= new List<string>();
+        Shorts.BlockedUrlPatterns ??= new List<string>();
+
+        YouTube.BlockedUrlPatterns ??= new List<string>();
+        Roblox.BlockedUrlPatterns ??= new List<string>();
+
         // 1.1 이하에서 올라온 설정파일의 Enabled 를 Mode 로 옮긴다.
         YouTube.MigrateLegacyMode();
         Roblox.MigrateLegacyMode();
+        Shorts.MigrateLegacyMode();
+
+        BrowserPolicy ??= new BrowserPolicySettings();
+        BrowserPolicy.Browsers ??= new List<string>();
+        BrowserPolicy.RegistryKeyOverrides ??= new Dictionary<string, string>();
+        BrowserPolicy.ExtensionAllowlist ??= new List<string>();
 
         TemporaryPermit ??= new TemporaryPermitSettings();
         if (TemporaryPermit.MaxMinutes <= 0) TemporaryPermit.MaxMinutes = 120;

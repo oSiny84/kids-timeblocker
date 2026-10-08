@@ -127,6 +127,169 @@ public class RemoteCommandHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Targets_IncludesShorts()
+    {
+        var response = await RunAsync("targets");
+
+        Assert.Contains("Shorts  : auto", response);
+    }
+
+    [Fact]
+    public async Task Status_ShowsBrowserPolicyState()
+    {
+        _enforcement.BrowserPolicyDescription = "chrome, edge (시크릿 차단 / DoH 끔)";
+
+        var response = await RunAsync("status");
+
+        // 쇼츠 차단이 실제로 적용됐는지 확인할 수 있는 유일한 창구다.
+        Assert.Contains("Browser Policy:", response);
+        Assert.Contains("chrome, edge", response);
+    }
+
+    [Fact]
+    public async Task BlockShorts_TurnsOnBrowserPolicyByItself()
+    {
+        // 기본값은 꺼짐이다. 쇼츠는 브라우저 정책 없이는 전혀 막히지 않으므로
+        // 대상을 직접 지정해 막으라고 하면 그것을 동의로 보고 함께 켠다.
+        // 부모가 아이 PC 에서 설정파일을 고치게 만들면 안 된다.
+        Assert.False(_configStore.Current.BrowserPolicy.Enabled);
+
+        var response = await RunAsync("block shorts");
+
+        Assert.True(_configStore.Current.BrowserPolicy.Enabled);
+        Assert.Contains("Shorts  : BLOCKED", response);
+    }
+
+    [Fact]
+    public async Task BlockShorts_SaysWhatElseItTurnedOn()
+    {
+        // PC 전체에 적용되는 변경이므로 조용히 넘어가면 안 된다.
+        var response = await RunAsync("block shorts");
+
+        Assert.Contains("함께 켰습니다", response);
+        Assert.Contains("시크릿", response);
+        Assert.Contains("policy off", response);
+    }
+
+    [Fact]
+    public async Task AutoShorts_AlsoTurnsOnBrowserPolicy()
+    {
+        // 시간대에만 막는 경우도 정책이 있어야 동작한다.
+        await RunAsync("auto shorts");
+
+        Assert.True(_configStore.Current.BrowserPolicy.Enabled);
+    }
+
+    [Fact]
+    public async Task UnblockShorts_DoesNotTurnOnBrowserPolicy()
+    {
+        // 막지 말라는 명령이 기능을 켤 이유는 없다.
+        await RunAsync("unblock shorts");
+
+        Assert.False(_configStore.Current.BrowserPolicy.Enabled);
+    }
+
+    [Fact]
+    public async Task BlockAll_DoesNotTurnOnBrowserPolicy_ButSaysSo()
+    {
+        // 포괄 명령의 부수효과로 PC 전체 설정을 바꾸면 안 된다.
+        // 대신 쇼츠가 실제로는 안 막힌다는 사실과 켜는 방법을 알려준다.
+        var response = await RunAsync("block all");
+
+        Assert.False(_configStore.Current.BrowserPolicy.Enabled);
+        Assert.Contains("policy on", response);
+    }
+
+    [Fact]
+    public async Task BlockShorts_WhenPolicyAlreadyOn_DoesNotRepeatTheNotice()
+    {
+        var config = _configStore.Current;
+        config.BrowserPolicy.Enabled = true;
+        _configStore.Save(config);
+
+        var response = await RunAsync("block shorts");
+
+        Assert.Contains("Shorts  : BLOCKED", response);
+        Assert.DoesNotContain("함께 켰습니다", response);
+    }
+
+    // ------------------------------------------------------- policy 명령
+
+    [Fact]
+    public async Task Policy_Status_ShowsOffByDefault()
+    {
+        var response = await RunAsync("policy");
+
+        Assert.Contains("Browser Policy : OFF", response);
+        Assert.Contains("켜려면: policy on", response);
+    }
+
+    [Fact]
+    public async Task PolicyOn_EnablesAndExplains()
+    {
+        var response = await RunAsync("policy on");
+
+        Assert.True(_configStore.Current.BrowserPolicy.Enabled);
+        Assert.Contains("OK", response);
+        Assert.Contains("시크릿", response);
+    }
+
+    [Fact]
+    public async Task PolicyOff_DisablesAndSaysRegistryIsRestored()
+    {
+        await RunAsync("policy on");
+
+        var response = await RunAsync("policy off");
+
+        Assert.False(_configStore.Current.BrowserPolicy.Enabled);
+        Assert.Contains("되돌렸습니다", response);
+    }
+
+    [Fact]
+    public async Task PolicyOn_WhenAlreadyOn_IsNotAnError()
+    {
+        await RunAsync("policy on");
+
+        var response = await RunAsync("policy on");
+
+        Assert.True(_configStore.Current.BrowserPolicy.Enabled);
+        Assert.Contains("이미 켜져", response);
+    }
+
+    [Fact]
+    public async Task PolicyOff_LeavesShortsModeAlone()
+    {
+        // 정책을 끄는 것과 "쇼츠를 막지 말라" 는 다른 얘기다.
+        // 상태를 건드리면 다시 켰을 때 의도가 사라진다.
+        await RunAsync("block shorts");
+        await RunAsync("policy off");
+
+        Assert.Equal(BlockMode.Blocked, _configStore.Current.Shorts.Mode);
+    }
+
+    [Fact]
+    public async Task BlockShorts_DoesNotAffectYouTube()
+    {
+        // 쇼츠만 막는 것이 요점이다. 일반 YouTube 가 함께 막히면 기능 자체가 의미 없다.
+        _clock.SetLocal(new DateTime(2026, 9, 22, 15, 0, 0, DateTimeKind.Local));
+
+        var response = await RunAsync("block shorts");
+
+        Assert.Contains("Shorts  : BLOCKED", response);
+        Assert.Contains("YouTube : ALLOW", response);
+    }
+
+    [Fact]
+    public async Task ShortsPermit_OpensShortsOnly()
+    {
+        var response = await RunAsync("shorts 30");
+
+        Assert.Contains("OK", response);
+        Assert.NotNull(_permits.GetEffective(BlockTarget.Shorts));
+        Assert.Null(_permits.GetEffective(BlockTarget.YouTube));
+    }
+
+    [Fact]
     public async Task Ping_ReportsUptime()
     {
         var response = await RunAsync("ping");

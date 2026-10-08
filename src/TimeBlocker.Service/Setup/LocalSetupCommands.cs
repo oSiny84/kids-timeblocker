@@ -1,6 +1,7 @@
 using System.Security.Principal;
 using Microsoft.Extensions.Logging.Abstractions;
 using TimeBlocker.Service.Blocking;
+using TimeBlocker.Service.Blocking.BrowserPolicy;
 using TimeBlocker.Shared.Common;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Models;
@@ -25,6 +26,8 @@ public static class LocalSetupCommands
             "set-admin" => SetAdmin(args),
             "enable-telegram" => SetTelegramEnabled(true),
             "disable-telegram" => SetTelegramEnabled(false),
+            "enable-shorts" => SetShortsBlocking(true),
+            "disable-shorts" => SetShortsBlocking(false),
             "show-config" => ShowConfig(),
             "cleanup" => await CleanupAsync(removeStateFiles: args.Length > 1 && args[1].Contains("state", StringComparison.OrdinalIgnoreCase)).ConfigureAwait(false),
             "dns-restore" => await RestoreDnsAsync().ConfigureAwait(false),
@@ -50,11 +53,18 @@ public static class LocalSetupCommands
             TimeBlocker.Service.exe disable-telegram
                 Telegram 원격 제어를 켜고 끕니다.
 
+            TimeBlocker.Service.exe enable-shorts
+            TimeBlocker.Service.exe disable-shorts
+                쇼츠만 차단하는 기능을 켜고 끕니다. (브라우저 정책 사용)
+                설치 중에 install.bat 이 물어보고, 나중에는 텔레그램 'policy on' / 'policy off'
+                로도 바꿀 수 있습니다.
+
             TimeBlocker.Service.exe show-config
                 현재 설정을 보여줍니다. (Bot Token 은 마스킹됩니다)
 
             TimeBlocker.Service.exe cleanup
-                hosts 차단 구간과 방화벽 규칙을 제거하고, 어댑터 DNS 를 원래 설정으로 되돌립니다.
+                hosts 차단 구간과 방화벽 규칙, 브라우저 정책을 제거하고
+                어댑터 DNS 를 원래 설정으로 되돌립니다.
                 (프로그램 제거 전에 실행)
 
             TimeBlocker.Service.exe dns-restore
@@ -134,6 +144,56 @@ public static class LocalSetupCommands
         return 0;
     }
 
+    /// <summary>
+    /// 쇼츠 차단(브라우저 정책)을 켜고 끈다.
+    ///
+    /// 설치 스크립트가 "쇼츠도 차단할까요?" 에 Y 를 받았을 때 호출한다.
+    /// 부모가 설정파일을 직접 고치지 않아도 되게 하는 것이 목적이다.
+    ///
+    /// 켤 때는 Shorts 를 항상 차단으로 둔다. 설치 중에 "차단할까요?" 에 Y 라고 한 사람은
+    /// 시간대 설정이 아니라 상시 차단을 기대한다. 시간대만 막으려면 'auto shorts' 를 쓴다.
+    ///
+    /// 끌 때는 Shorts 의 상태를 건드리지 않는다. 텔레그램 'policy off' 와 같은 동작이어야 하고,
+    /// 다시 켰을 때 전에 정한 대로 돌아가야 하기 때문이다.
+    /// (이 명령은 텔레그램을 쓸 수 없을 때의 로컬 수단이다)
+    /// </summary>
+    private static int SetShortsBlocking(bool enabled)
+    {
+        if (!RequireAdmin()) return 1;
+
+        var store = new JsonConfigurationStore(AppPaths.ConfigFile);
+        var config = store.Current;
+
+        config.BrowserPolicy.Enabled = enabled;
+        if (enabled) config.Shorts.Mode = BlockMode.Blocked;
+        store.Save(config);
+
+        if (!enabled)
+        {
+            Console.WriteLine("쇼츠 차단: 사용 안 함");
+            Console.WriteLine("서비스가 다음 주기에 바꿔놓은 브라우저 정책을 원래대로 되돌립니다.");
+            Console.WriteLine("(서비스가 멈춰 있으면 'cleanup' 을 실행하세요)");
+            return 0;
+        }
+
+        Console.WriteLine("쇼츠 차단: 사용 (일반 YouTube 영상은 그대로 볼 수 있습니다)");
+        Console.WriteLine($"  대상 브라우저 : {string.Join(", ", config.BrowserPolicy.Browsers)}");
+        Console.WriteLine($"  차단 URL      : {string.Join(", ", config.Shorts.BlockedUrlPatterns)}");
+
+        // PC 전체에 적용되는 변경이므로 무엇이 함께 켜지는지 분명히 알린다.
+        Console.WriteLine("  함께 막습니다 :");
+        if (config.BrowserPolicy.DisableIncognito) Console.WriteLine("    - 시크릿 모드");
+        if (config.BrowserPolicy.DisableGuestMode) Console.WriteLine("    - 게스트 모드");
+        if (config.BrowserPolicy.DisableDnsOverHttps) Console.WriteLine("    - 브라우저 DoH (DNS 차단 우회 방지)");
+        if (config.BrowserPolicy.BlockExtensionInstalls) Console.WriteLine("    - 확장 프로그램 설치");
+
+        Console.WriteLine();
+        Console.WriteLine("나중에 바꾸려면 텔레그램에서: policy off / policy on");
+        Console.WriteLine("시간대에만 막으려면 텔레그램에서: auto shorts");
+
+        return 0;
+    }
+
     private static int SetTelegramEnabled(bool enabled)
     {
         if (!RequireAdmin()) return 1;
@@ -179,14 +239,29 @@ public static class LocalSetupCommands
         {
             var settings = config.GetTarget(target);
             Console.WriteLine(
-                $"  {target.ToDisplayName(),-8} Enabled={settings.Enabled} DNS={settings.UseDnsBlocking} " +
-                $"Firewall={settings.UseFirewallBlocking} Domains={settings.Domains.Count}");
+                $"  {target.ToDisplayName(),-8} Mode={settings.Mode.ToCommandName(),-8} DNS={settings.UseDnsBlocking} " +
+                $"Firewall={settings.UseFirewallBlocking} Domains={settings.Domains.Count} " +
+                $"BrowserPolicy={settings.UseBrowserPolicyBlocking} Urls={settings.BlockedUrlPatterns.Count}");
         }
 
         Console.WriteLine();
         Console.WriteLine("[DNS]");
         Console.WriteLine($"  Enabled={config.Dns.Enabled} Mode={config.Dns.Mode} Port={config.Dns.ProxyPort}");
         Console.WriteLine($"  Upstream={string.Join(", ", config.Dns.UpstreamServers)}");
+
+        Console.WriteLine();
+        Console.WriteLine("[BrowserPolicy]");
+        Console.WriteLine($"  Enabled={config.BrowserPolicy.Enabled}");
+        Console.WriteLine($"  Browsers={string.Join(", ", config.BrowserPolicy.Browsers)}");
+        Console.WriteLine(
+            $"  DisableIncognito={config.BrowserPolicy.DisableIncognito} " +
+            $"DisableGuestMode={config.BrowserPolicy.DisableGuestMode} " +
+            $"DisableDnsOverHttps={config.BrowserPolicy.DisableDnsOverHttps}");
+        Console.WriteLine($"  BlockExtensionInstalls={config.BrowserPolicy.BlockExtensionInstalls}");
+        foreach (var pattern in config.Shorts.BlockedUrlPatterns)
+        {
+            Console.WriteLine($"  blocked url: {pattern}");
+        }
 
         Console.WriteLine();
         Console.WriteLine("[Telegram]");
@@ -233,6 +308,7 @@ public static class LocalSetupCommands
             new FirewallManager(NullLogger<FirewallManager>.Instance),
             CreateAdapterConfigurator(),
             new Blocking.RobloxLocator(NullLogger<Blocking.RobloxLocator>.Instance),
+            new RegistryPolicyEditor(NullLogger<RegistryPolicyEditor>.Instance),
             logger);
 
         var report = await doctor.RunAsync(CancellationToken.None).ConfigureAwait(false);
@@ -252,7 +328,18 @@ public static class LocalSetupCommands
             new FirewallManager(NullLogger<FirewallManager>.Instance),
             CreateAdapterConfigurator(),
             new Blocking.DnsCacheFlusher(NullLogger<Blocking.DnsCacheFlusher>.Instance),
+            CreateBrowserPolicyManager(),
             NullLogger.Instance);
+
+    /// <summary>
+    /// 서비스 밖(cleanup / doctor)에서도 브라우저 정책을 되돌릴 수 있어야 한다.
+    /// DI 없이 직접 조립한다.
+    /// </summary>
+    private static IBrowserPolicyManager CreateBrowserPolicyManager() =>
+        new BrowserPolicyManager(
+            new RegistryPolicyEditor(NullLogger<RegistryPolicyEditor>.Instance),
+            new BrowserPolicyStateStore(NullLogger<BrowserPolicyStateStore>.Instance),
+            NullLogger<BrowserPolicyManager>.Instance);
 
     /// <summary>
     /// `dns-restore` 명령. 어댑터 DNS 만 즉시 원래대로 되돌린다.

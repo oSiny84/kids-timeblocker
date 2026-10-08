@@ -10,6 +10,7 @@ using System.ServiceProcess;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TimeBlocker.Service.Blocking;
+using TimeBlocker.Service.Blocking.BrowserPolicy;
 using TimeBlocker.Service.Blocking.Dns;
 using TimeBlocker.Shared.Common;
 using TimeBlocker.Shared.Configuration;
@@ -35,6 +36,7 @@ public sealed class DoctorService : IDiagnosticsService
     private readonly IFirewallManager _firewall;
     private readonly INetworkAdapterDnsConfigurator _adapters;
     private readonly RobloxLocator _locator;
+    private readonly IRegistryPolicyEditor _registry;
     private readonly ILogger _logger;
 
     private readonly INotificationHub? _notifierHub;
@@ -45,6 +47,7 @@ public sealed class DoctorService : IDiagnosticsService
         IFirewallManager firewall,
         INetworkAdapterDnsConfigurator adapters,
         RobloxLocator locator,
+        IRegistryPolicyEditor registry,
         ILogger logger,
         INotificationHub? notifierHub = null)
     {
@@ -53,6 +56,7 @@ public sealed class DoctorService : IDiagnosticsService
         _firewall = firewall;
         _adapters = adapters;
         _locator = locator;
+        _registry = registry;
         _logger = logger;
         _notifierHub = notifierHub;
     }
@@ -100,6 +104,7 @@ public sealed class DoctorService : IDiagnosticsService
         report.Add(CheckHostsRegionSanity());
         report.Add(await CheckFirewallAsync(config, ct).ConfigureAwait(false));
         report.Add(CheckRoblox(config));
+        report.Add(CheckBrowserPolicy(config));
         report.Add(CheckNotifierApp());
 
         // --- Telegram ---
@@ -479,6 +484,116 @@ public sealed class DoctorService : IDiagnosticsService
         return DoctorCheck.Warn(name,
             $"{string.Join(", ", open)} 가 unblock 상태 (스케줄과 무관하게 열림)",
             $"텔레그램에서 실행: {commands}");
+    }
+
+    /// <summary>
+    /// 브라우저 정책(URL 경로 차단)이 레지스트리에 실제로 들어가 있는지 확인한다.
+    ///
+    /// 쇼츠 차단은 이 정책에만 의존하므로, 설정만 켜고 레지스트리에 들어가지 않은 상태를
+    /// 잡아내지 못하면 "막았는데 쇼츠가 그대로 되네" 가 된다.
+    /// 서비스 내부 상태를 보지 않고 레지스트리를 직접 읽는다.
+    ///
+    /// URLBlocklist 는 차단 시간대에만 들어가므로 "있어야 한다" 고 단정할 수 없다.
+    /// 대신 기능이 켜진 동안 항상 들어가 있어야 하는 우회 봉쇄 항목(시크릿 / DoH 등)으로
+    /// 쓰기가 실제로 먹었는지 판단한다. 권한 부족이나 잘못된 키 경로가 여기서 드러난다.
+    /// </summary>
+    private DoctorCheck CheckBrowserPolicy(TimeBlockerConfig config)
+    {
+        const string name = "Browser policy";
+        var policy = config.BrowserPolicy;
+
+        if (!policy.Enabled)
+        {
+            // block shorts 를 걸어둔 사람은 분명히 차단을 기대하고 있다.
+            // 기능이 꺼져 있으면 아무 일도 일어나지 않으므로 반드시 알려준다.
+            return config.Shorts.Mode == BlockMode.Blocked && config.Shorts.UseBrowserPolicyBlocking
+                ? DoctorCheck.Warn(name, "꺼져 있어 Shorts 차단이 적용되지 않습니다",
+                    "텔레그램에서 'policy on' 을 보내세요. (또는 'block shorts')")
+                : DoctorCheck.Pass(name, "사용 안 함");
+        }
+
+        var resolved = new List<(string BrowserId, string Key)>();
+        var unknown = new List<string>();
+
+        foreach (var browserId in policy.Browsers)
+        {
+            if (string.IsNullOrWhiteSpace(browserId)) continue;
+
+            var key = BrowserProfiles.Resolve(browserId, policy.RegistryKeyOverrides);
+            if (key is null) unknown.Add(browserId.Trim());
+            else resolved.Add((browserId.Trim(), key));
+        }
+
+        if (resolved.Count == 0)
+        {
+            return DoctorCheck.Fail(name, "적용할 브라우저가 없습니다",
+                "BrowserPolicy.Browsers 에 chrome / edge 등을 적고, 목록에 없는 브라우저는 " +
+                "RegistryKeyOverrides 로 정책 키 경로를 지정하세요.");
+        }
+
+        // 기능이 켜진 동안 항상 들어가 있어야 하는 값들. 하나도 없으면 "쓰기가 먹지 않았다" 는 신호다.
+        var expected = new List<(string Name, PolicyValue Value)>();
+        if (policy.DisableIncognito)
+        {
+            expected.Add((PolicyNames.IncognitoModeAvailability, PolicyValue.Dword(1)));
+        }
+        if (policy.DisableGuestMode)
+        {
+            expected.Add((PolicyNames.BrowserGuestModeEnabled, PolicyValue.Dword(0)));
+        }
+        if (policy.DisableDnsOverHttps)
+        {
+            expected.Add((PolicyNames.DnsOverHttpsMode, PolicyValue.Text("off")));
+        }
+
+        var details = new List<string>();
+        var broken = new List<string>();
+
+        foreach (var (browserId, key) in resolved)
+        {
+            try
+            {
+                var missing = expected
+                    .Where(e => _registry.ReadValue(key, e.Name) != e.Value)
+                    .Select(e => e.Name)
+                    .ToList();
+
+                var urlCount = (_registry.ReadList($@"{key}\{PolicyNames.UrlBlocklist}") ?? Array.Empty<string>()).Count;
+
+                if (missing.Count > 0)
+                {
+                    broken.Add($"{browserId}({string.Join("/", missing)} 없음)");
+                    continue;
+                }
+
+                details.Add($"{browserId} URL {urlCount}개");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "{Browser} 의 정책 키를 읽지 못했습니다.", browserId);
+                broken.Add($"{browserId}(읽기 실패)");
+            }
+        }
+
+        var unknownText = unknown.Count > 0 ? $" / 경로를 모르는 이름: {string.Join(", ", unknown)}" : string.Empty;
+
+        if (broken.Count > 0)
+        {
+            return DoctorCheck.Warn(name,
+                $"정책이 적용되지 않은 브라우저: {string.Join(", ", broken)}{unknownText}",
+                "서비스가 관리자(LocalSystem) 권한으로 돌고 있는지 확인하세요. " +
+                "브라우저에서 정책 페이지(chrome://policy, edge://policy)를 열면 실제 적용 여부를 볼 수 있습니다.");
+        }
+
+        // 봉쇄 항목을 전부 끈 설정이면 확인할 값이 없다. 상태만 알려준다.
+        var summary = expected.Count == 0
+            ? $"{string.Join(", ", resolved.Select(r => r.BrowserId))} (우회 봉쇄 없음)"
+            : string.Join(", ", details);
+
+        return unknown.Count > 0
+            ? DoctorCheck.Warn(name, summary + unknownText,
+                "경로를 모르는 브라우저는 RegistryKeyOverrides 로 정책 키를 지정하거나 목록에서 빼세요.")
+            : DoctorCheck.Pass(name, summary);
     }
 
     /// <summary>
