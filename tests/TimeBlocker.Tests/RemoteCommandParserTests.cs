@@ -339,7 +339,7 @@ public class RemoteCommandParserTests
         // "넣었는데 안 막힌다" 가 된다. 아예 거부하고 이유를 알려준다.
         var command = _sut.Parse(input);
 
-        Assert.Equal(RemoteCommandType.Invalid, command.Type);
+        Assert.Equal(RemoteCommandType.Unknown, command.Type);
         Assert.Contains("BlockedUrlPatterns", command.Error);
     }
 
