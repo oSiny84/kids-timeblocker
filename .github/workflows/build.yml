@@ -1,0 +1,50 @@
+# 빌드 + 단위 테스트 + 설치용 zip 생성.
+#
+# 왜 필요한가:
+#   이 프로젝트는 net8.0-windows / WinForms / 레지스트리 / 방화벽을 쓰므로
+#   Windows 에서만 빌드되고 테스트된다. 손으로 빌드할 PC 가 없을 때도
+#   변경이 정말 컴파일되는지, 테스트가 통과하는지 확인할 수 있어야 한다.
+#
+#   결과물(zip)은 Actions 실행 화면의 Artifacts 에서 내려받을 수 있다.
+#   그 zip 은 릴리즈에 올리는 것과 같은 방식으로 만들어지므로,
+#   압축만 풀고 install.bat 을 실행하면 바로 설치된다.
+name: build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  # 필요할 때 Actions 탭에서 직접 돌릴 수 있게 둔다.
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .NET 8 SDK 설치
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # 저장소에 있는 스크립트를 그대로 쓴다.
+      # 개발자가 로컬에서 build.bat 으로 돌리는 것과 같은 경로를 지나므로
+      # "CI 는 통과하는데 로컬은 깨지는" 차이가 생기지 않는다.
+      - name: 빌드 + 단위 테스트 + 게시
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      # 빌드가 끝난 결과를 재사용한다. (-SkipBuild)
+      - name: 설치용 zip 생성
+        shell: pwsh
+        run: ./scripts/make-release.ps1 -SkipBuild
+
+      - name: zip 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimeBlocker-${{ github.sha }}
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 14
