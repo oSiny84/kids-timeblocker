@@ -217,6 +217,12 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         builder.AppendLine("DNS:");
         builder.AppendLine(_enforcement.DnsStatus.Format());
 
+        // 쇼츠 차단은 브라우저 정책으로만 동작한다.
+        // 실제로 적용됐는지 확인할 방법이 여기뿐이므로 상태에 항상 보여준다.
+        builder.AppendLine();
+        builder.AppendLine("Browser Policy:");
+        builder.AppendLine(_enforcement.BrowserPolicyDescription);
+
         return builder.ToString().TrimEnd();
     }
 
@@ -403,7 +409,31 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
                 $"{decision.Target.ToDisplayName(),-8}: {ResponseFormatter.BlockedOrAllowed(decision.IsBlocked),-8}({decision.Mode.ToCommandName()})");
         }
 
+        // Shorts 는 브라우저 정책으로만 막힌다. 기능이 꺼져 있으면 BLOCKED 로 보이지만
+        // 실제로는 아무것도 막히지 않는다. 그 간극을 조용히 두면 안 된다.
+        var shortsWarning = DescribeShortsGap(config, applied);
+        if (shortsWarning is not null)
+        {
+            builder.AppendLine();
+            builder.AppendLine(shortsWarning);
+        }
+
         return builder.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Shorts 를 막으라고 했지만 브라우저 정책이 꺼져 있어 실제로는 적용되지 않는 경우의 안내.
+    /// 해당 없으면 null.
+    /// </summary>
+    private static string? DescribeShortsGap(TimeBlockerConfig config, IReadOnlyCollection<BlockTarget> applied)
+    {
+        if (!applied.Contains(BlockTarget.Shorts)) return null;
+        if (config.Shorts.Mode == BlockMode.Open) return null;
+        if (config.BrowserPolicy.Enabled && config.Shorts.UseBrowserPolicyBlocking) return null;
+
+        return "※ Shorts 차단이 실제로는 적용되지 않습니다.\n" +
+               "   쇼츠는 URL 경로를 봐야 해서 브라우저 정책이 필요합니다.\n" +
+               "   설정파일에서 BrowserPolicy.Enabled 를 true 로 바꾸고 서비스를 재시작하세요.";
     }
 
     private async Task<string> HandleDomainAsync(RemoteCommand command, CancellationToken ct)

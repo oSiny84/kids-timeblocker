@@ -127,6 +127,72 @@ public class RemoteCommandHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Targets_IncludesShorts()
+    {
+        var response = await RunAsync("targets");
+
+        Assert.Contains("Shorts  : auto", response);
+    }
+
+    [Fact]
+    public async Task Status_ShowsBrowserPolicyState()
+    {
+        _enforcement.BrowserPolicyDescription = "chrome, edge (시크릿 차단 / DoH 끔)";
+
+        var response = await RunAsync("status");
+
+        // 쇼츠 차단이 실제로 적용됐는지 확인할 수 있는 유일한 창구다.
+        Assert.Contains("Browser Policy:", response);
+        Assert.Contains("chrome, edge", response);
+    }
+
+    [Fact]
+    public async Task BlockShorts_WarnsWhenBrowserPolicyIsOff()
+    {
+        // 기본값은 꺼짐이다. 이 상태로 block shorts 를 하면 BLOCKED 로 보이지만
+        // 실제로는 아무것도 막히지 않으므로, 그 사실을 반드시 알려줘야 한다.
+        var response = await RunAsync("block shorts");
+
+        Assert.Contains("Shorts  : BLOCKED", response);
+        Assert.Contains("BrowserPolicy.Enabled", response);
+    }
+
+    [Fact]
+    public async Task BlockShorts_DoesNotWarnWhenBrowserPolicyIsOn()
+    {
+        var config = _configStore.Current;
+        config.BrowserPolicy.Enabled = true;
+        _configStore.Save(config);
+
+        var response = await RunAsync("block shorts");
+
+        Assert.Contains("Shorts  : BLOCKED", response);
+        Assert.DoesNotContain("BrowserPolicy.Enabled", response);
+    }
+
+    [Fact]
+    public async Task BlockShorts_DoesNotAffectYouTube()
+    {
+        // 쇼츠만 막는 것이 요점이다. 일반 YouTube 가 함께 막히면 기능 자체가 의미 없다.
+        _clock.SetLocal(new DateTime(2026, 9, 22, 15, 0, 0, DateTimeKind.Local));
+
+        var response = await RunAsync("block shorts");
+
+        Assert.Contains("Shorts  : BLOCKED", response);
+        Assert.Contains("YouTube : ALLOW", response);
+    }
+
+    [Fact]
+    public async Task ShortsPermit_OpensShortsOnly()
+    {
+        var response = await RunAsync("shorts 30");
+
+        Assert.Contains("OK", response);
+        Assert.NotNull(_permits.GetEffective(BlockTarget.Shorts));
+        Assert.Null(_permits.GetEffective(BlockTarget.YouTube));
+    }
+
+    [Fact]
     public async Task Ping_ReportsUptime()
     {
         var response = await RunAsync("ping");

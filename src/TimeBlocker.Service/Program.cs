@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
 using TimeBlocker.Service.Blocking;
+using TimeBlocker.Service.Blocking.BrowserPolicy;
 using TimeBlocker.Service.Blocking.Dns;
 using TimeBlocker.Service.Ipc;
 using TimeBlocker.Service.Logging;
@@ -137,6 +138,13 @@ public static class Program
             new AdapterDnsStateStore(sp.GetRequiredService<ILogger<AdapterDnsStateStore>>()));
         services.AddSingleton<INetworkAdapterDnsConfigurator, NetworkAdapterDnsConfigurator>();
         services.AddSingleton<IDnsCacheFlusher, DnsCacheFlusher>();
+
+        // 브라우저 정책(URL 경로 차단). 레지스트리 접근은 IRegistryPolicyEditor 뒤에 숨어 있다.
+        services.AddSingleton<IRegistryPolicyEditor, RegistryPolicyEditor>();
+        services.AddSingleton<IBrowserPolicyStateStore>(sp =>
+            new BrowserPolicyStateStore(sp.GetRequiredService<ILogger<BrowserPolicyStateStore>>()));
+        services.AddSingleton<IBrowserPolicyManager, BrowserPolicyManager>();
+
         services.AddSingleton<RobloxLocator>();
         services.AddSingleton<IUserSessionNotifier, UserSessionNotifier>();
         services.AddSingleton<IRunningProcessTracker, RunningProcessTracker>();
@@ -157,6 +165,7 @@ public static class Program
             sp.GetRequiredService<IFirewallManager>(),
             sp.GetRequiredService<INetworkAdapterDnsConfigurator>(),
             sp.GetRequiredService<RobloxLocator>(),
+            sp.GetRequiredService<IRegistryPolicyEditor>(),
             sp.GetRequiredService<ILogger<DoctorService>>(),
             sp.GetRequiredService<INotificationHub>()));
 
@@ -165,6 +174,7 @@ public static class Program
             sp.GetRequiredService<IFirewallManager>(),
             sp.GetRequiredService<INetworkAdapterDnsConfigurator>(),
             sp.GetRequiredService<IDnsCacheFlusher>(),
+            sp.GetRequiredService<IBrowserPolicyManager>(),
             sp.GetRequiredService<ILogger<SystemRestoreService>>()));
 
         services.AddSingleton<BlockingCoordinator>();

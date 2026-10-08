@@ -124,7 +124,7 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
     {
         const string usage =
             "Usage:\nblock youtube      계속 막기\nunblock youtube    계속 열기\nauto youtube       스케줄대로\n\n" +
-            "대상: youtube / roblox / all";
+            "대상: youtube / roblox / shorts / all";
 
         // 대상을 안 적으면 전체로 본다. 응답에 무엇이 바뀌었는지 그대로 적는다.
         if (args.Length == 0)
@@ -188,7 +188,15 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
     private static RemoteCommand ParseDomain(string raw, string head, string[] args)
     {
         const string usage =
-            "Usage:\ndomains youtube\ndomain add youtube music.youtube.com\ndomain remove youtube music.youtube.com";
+            "Usage:\ndomains youtube\ndomain add youtube music.youtube.com\ndomain remove youtube music.youtube.com\n\n" +
+            "대상: youtube / roblox";
+
+        // Shorts 는 도메인이 아니라 URL 경로로 막는다. 도메인을 받아주면
+        // 설정에는 들어가지만 아무 효과가 없어서 "넣었는데 안 막힌다" 가 된다.
+        const string shortsNote =
+            "ERROR\nShorts 는 도메인으로 막지 않습니다. URL 경로로 막습니다.\n\n" +
+            "쇼츠 차단 대상을 바꾸려면 설정파일의 Shorts.BlockedUrlPatterns 를 수정하세요.\n" +
+            "도메인을 넣으면 youtube.com 전체가 막혀 일반 영상도 못 보게 됩니다.";
 
         if (args.Length == 0)
         {
@@ -209,6 +217,8 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
                 return RemoteCommand.Invalid(raw, $"ERROR\nUnknown target: {args[1]}\n\n{usage}");
             }
 
+            if (domainTarget == BlockTarget.Shorts) return RemoteCommand.Invalid(raw, shortsNote);
+
             var domain = args[2].Trim().ToLowerInvariant();
             if (!IsValidDomain(domain))
             {
@@ -228,6 +238,8 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
         {
             return RemoteCommand.Invalid(raw, $"ERROR\nUnknown target: {args[0]}\n\n{usage}");
         }
+
+        if (showTarget == BlockTarget.Shorts) return RemoteCommand.Invalid(raw, shortsNote);
 
         return new RemoteCommand { Type = RemoteCommandType.ShowDomains, Target = showTarget, RawText = raw };
     }
@@ -531,6 +543,9 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
                 return true;
             case "roblox" or "rb" or "rbx" or "r":
                 target = BlockTarget.Roblox;
+                return true;
+            case "shorts" or "short" or "sh" or "쇼츠":
+                target = BlockTarget.Shorts;
                 return true;
             case "all" or "everything":
                 target = BlockTarget.All;

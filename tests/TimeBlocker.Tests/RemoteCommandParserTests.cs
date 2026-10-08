@@ -17,6 +17,9 @@ public class RemoteCommandParserTests
     [InlineData("roblox 60", BlockTarget.Roblox, 60)]
     [InlineData("rb 60", BlockTarget.Roblox, 60)]
     [InlineData("all 20", BlockTarget.All, 20)]
+    [InlineData("shorts 15", BlockTarget.Shorts, 15)]
+    [InlineData("sh 15", BlockTarget.Shorts, 15)]
+    [InlineData("쇼츠 15", BlockTarget.Shorts, 15)]
     [InlineData("  YouTube   45  ", BlockTarget.YouTube, 45)]
     public void ParsesPermitCommands(string input, BlockTarget expectedTarget, int expectedMinutes)
     {
@@ -103,6 +106,9 @@ public class RemoteCommandParserTests
     [InlineData("/unblock youtube", BlockMode.Open, BlockTarget.YouTube)]
     [InlineData("block all", BlockMode.Blocked, BlockTarget.All)]
     [InlineData("auto all", BlockMode.Schedule, BlockTarget.All)]
+    [InlineData("block shorts", BlockMode.Blocked, BlockTarget.Shorts)]
+    [InlineData("unblock sh", BlockMode.Open, BlockTarget.Shorts)]
+    [InlineData("auto shorts", BlockMode.Schedule, BlockTarget.Shorts)]
     public void SetMode_ParsesEveryState(string input, BlockMode expectedMode, BlockTarget expectedTarget)
     {
         // 상태는 셋 중 하나로만 정해진다. 어떤 명령을 쳐도 애매하게 남지 않는다.
@@ -321,6 +327,20 @@ public class RemoteCommandParserTests
         Assert.Equal(RemoteCommandType.AddDomain, command.Type);
         Assert.Equal(BlockTarget.YouTube, command.Target);
         Assert.Equal("music.youtube.com", command.Domain);
+    }
+
+    [Theory]
+    [InlineData("domains shorts")]
+    [InlineData("domain add shorts youtube.com")]
+    [InlineData("domain remove shorts youtube.com")]
+    public void Domain_RejectsShorts(string input)
+    {
+        // 쇼츠는 URL 경로로 막는다. 도메인을 받아주면 설정에 들어가고도 아무 효과가 없어서
+        // "넣었는데 안 막힌다" 가 된다. 아예 거부하고 이유를 알려준다.
+        var command = _sut.Parse(input);
+
+        Assert.Equal(RemoteCommandType.Invalid, command.Type);
+        Assert.Contains("BlockedUrlPatterns", command.Error);
     }
 
     [Fact]

@@ -97,6 +97,33 @@
     ],
     "ExtraExecutablePaths": []
   },
+  "Shorts": {
+    "Mode": "Schedule",
+    "UseDnsBlocking": false,
+    "UseFirewallBlocking": false,
+    "TerminateProcesses": false,
+    "UseBrowserPolicyBlocking": true,
+    "BlockedUrlPatterns": [
+      "youtube.com/shorts",
+      "youtube.com/youtubei/v1/reel/"
+    ],
+    "Domains": [],
+    "ProcessNames": [],
+    "ExtraExecutablePaths": []
+  },
+  "BrowserPolicy": {
+    "Enabled": false,
+    "Browsers": [
+      "chrome",
+      "edge"
+    ],
+    "RegistryKeyOverrides": {},
+    "DisableIncognito": true,
+    "DisableGuestMode": true,
+    "DisableDnsOverHttps": true,
+    "BlockExtensionInstalls": false,
+    "ExtensionAllowlist": []
+  },
   "TemporaryPermit": {
     "MaxMinutes": 120,
     "MinMinutes": 1

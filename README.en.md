@@ -88,7 +88,7 @@ to fix it.
 
 ### 5) Commands you'll use most
 
-This is really all you need for day-to-day use. Swap the target for `youtube` / `roblox` / `all`.
+This is really all you need for day-to-day use. Swap the target for `youtube` / `roblox` / `shorts` / `all`.
 
 | Command | What it does |
 |---|---|
@@ -98,8 +98,13 @@ This is really all you need for day-to-day use. Swap the target for `youtube` / 
 | `unblock youtube` | Keep YouTube open regardless of schedule |
 | `youtube 30` | Allow for 30 minutes (automatically reverts afterward) |
 | `schedule mon-fri 21:00 07:00` | Block weeknights 9pm to 7am |
+| `block shorts` | Block Shorts only (regular YouTube videos still work) |
 | `msg have dinner first` | Pop a message up on the PC screen |
 | `help` (or `list`) | Full command list |
+
+`block shorts` requires **enabling browser policy in the configuration first**
+(see "Blocking Shorts only" in section 10). If you issue the command without it,
+the reply tells you so.
 
 For more commands and examples, see the **"8. Telegram commands"** section below.
 
@@ -306,21 +311,23 @@ Uninstall and `cleanup` share the **same code** (`SystemRestoreService`). The or
 2. Restore saved Original DNS      <- restore internet first
 3. Remove the TimeBlocker hosts region
 4. Remove TimeBlocker firewall rules
-5. Flush DNS cache
-6. Remove the Windows Service
-7. Remove remaining state files
+5. Restore browser policy
+6. Flush DNS cache
+7. Remove the Windows Service
+8. Remove remaining state files
 ```
 
 **If a step fails, the rest still run**, and a full result summary is printed at the end.
 
 ```
-Permit cleanup    : OK
-DNS restore       : OK (1: Wi-Fi)
-Hosts cleanup     : OK
-Firewall cleanup  : OK (1 removed)
-DNS cache flush   : OK
-State cleanup     : OK
-Service removal   : OK
+Permit cleanup         : OK
+DNS restore            : OK (1: Wi-Fi)
+Hosts cleanup          : OK
+Firewall cleanup       : OK (1 removed)
+Browser policy restore : OK
+DNS cache flush        : OK
+State cleanup          : OK
+Service removal        : OK
 
 System restored successfully.
 ```
@@ -431,8 +438,9 @@ Service     : RUNNING
 Current Time:
 2026-09-22 21:20
 
-YouTube     : BLOCKED
-Roblox      : BLOCKED
+YouTube     : BLOCKED (block · always blocked)
+Shorts      : BLOCKED (auto · currently in the blocking window)
+Roblox      : BLOCKED (auto · currently in the blocking window)
 
 Schedule:
 Mon-Thu 21:00 ~ 07:00
@@ -448,6 +456,9 @@ DNS Mode      : ProxyWithHostsFallback
 DNS Proxy     : RUNNING
 Fallback      : NOT ACTIVE
 Upstream DNS  : 1.1.1.1, 8.8.8.8
+
+Browser Policy:
+chrome, edge (incognito blocked / guest blocked / DoH off)
 ```
 
 If the DNS proxy couldn't start, this part looks like this instead:
@@ -532,13 +543,18 @@ Each target is always in **exactly one of three states**.
 | Locked | `block youtube` | Always blocked, regardless of the schedule |
 | Open | `unblock youtube` | Always open, regardless of the schedule |
 
-The target is `youtube` / `roblox` / `all`. Omitting the target applies to everything
+The target is `youtube` / `roblox` / `shorts` / `all`. Omitting the target applies to everything
 (`block` = `block all`).
+
+`shorts` blocks **only Shorts**. Regular YouTube videos still play. It uses a completely
+different blocking mechanism from the other targets and needs separate setup — see
+"Blocking Shorts only".
 
 Checking with `targets` looks like this:
 
 ```
 YouTube : block   Locked (always blocked)
+Shorts  : auto    Automatic (follows the schedule)
 Roblox  : auto    Automatic (follows the schedule)
 ```
 
@@ -546,6 +562,7 @@ Roblox  : auto    Automatic (follows the schedule)
 
 ```
 YouTube     : BLOCKED (block · always blocked)
+Shorts      : BLOCKED (auto · currently in the blocking window)
 Roblox      : ALLOW   (auto · not currently in the blocking window)
 ```
 
@@ -1093,6 +1110,159 @@ channel can only do two things: "receive notifications" and "send a reply." Ther
 change settings or unblock anything through it. To prevent spam, replies are rate-limited to a
 10-second cooldown and 20 per hour.
 
+### Blocking Shorts only — browser policy
+
+**Shorts cannot be blocked with DNS.** Shorts and regular videos use the same `youtube.com`,
+the same `googlevideo.com`, and even the same TLS connection. DNS blocking works at the domain
+level, so blocking `youtube.com` kills all of YouTube, and not blocking it leaves Shorts open.
+The only mechanism that can see the path (`/shorts/...`) is **browser policy**.
+
+So the `shorts` target takes a different route.
+
+| Target | Blocking mechanism |
+|---|---|
+| YouTube / Roblox | DNS (domains) + firewall + process termination |
+| Shorts | Browser policy (`URLBlocklist` in the HKLM registry) |
+
+#### Turning it on
+
+Set `BrowserPolicy.Enabled` to `true` in the configuration file and restart the service.
+**It is off by default** — it touches registry policy, so it must be enabled explicitly.
+
+```jsonc
+"BrowserPolicy": {
+  "Enabled": true,
+  "Browsers": [ "chrome", "edge" ]
+}
+```
+
+Then set the state over Telegram:
+
+```
+block shorts      always block Shorts
+auto shorts       block Shorts only during scheduled hours
+unblock shorts    don't block Shorts
+shorts 30         open Shorts for 30 minutes
+```
+
+The `Browser Policy` line in `status` and the `Browser policy` item in `doctor` tell you whether
+it actually applied. You can also open `chrome://policy` in the browser to see `URLBlocklist`
+directly.
+
+#### What gets blocked and what doesn't
+
+Two patterns go in by default:
+
+```
+youtube.com/shorts            the Shorts watch page
+youtube.com/youtubei/v1/reel/ the internal API the Shorts feed uses to fetch the next video
+```
+
+A host entry covers its subdomains, so `youtube.com/shorts` alone catches both
+`www.youtube.com/shorts/<id>` and `m.youtube.com/shorts/<id>`.
+
+| Situation | Result |
+|---|---|
+| Typing a Shorts URL in the address bar | Blocked |
+| Opening a Shorts link in a new tab / reloading | Blocked |
+| Regular YouTube videos (`/watch`) | **Still work** (intended) |
+| Tapping a Shorts thumbnail from the YouTube home page | **Not blocked if no page load happens** |
+| The Shorts shelf on the home page | Still visible |
+
+Those last two rows are the limitation of this approach. YouTube navigates by rewriting the page
+in JavaScript (SPA), and `URLBlocklist` only stops **real page loads**, so it never sees that
+navigation. Google's and Microsoft's own documentation states this limitation. We block the
+internal API the Shorts feed uses to compensate, so videos stop advancing — but it is not
+complete, and **how much leaks through has to be checked on your child's PC.**
+
+Blocking it completely requires a force-installed extension, which is outside the scope of
+this feature.
+
+#### Bypass routes are closed too
+
+Turning on `URLBlocklist` alone leaves several ways out. The same settings close them.
+
+| Setting | Default | What it closes |
+|---|---|---|
+| `DisableIncognito` | `true` | Incognito mode (`IncognitoModeAvailability=1`) |
+| `DisableGuestMode` | `true` | Guest mode (a separate profile, so policies/extensions are weaker) |
+| `DisableDnsOverHttps` | `true` | Browser DoH — **if left on, it bypasses YouTube/Roblox DNS blocking too** |
+| `BlockExtensionInstalls` | `false` | Installing VPN/proxy extensions (`ExtensionInstallBlocklist=["*"]`) |
+
+**These stay applied the whole time the feature is on, regardless of the blocking window.**
+If incognito were only blocked during blocking hours, a child could simply open an incognito
+window beforehand.
+
+`BlockExtensionInstalls` can also stop extensions already in use, so it is off by default.
+When enabling it, list the extension IDs to keep in `ExtensionAllowlist`.
+
+#### Other browsers
+
+**Policies are per-browser.** Setting them for Chrome/Edge has no effect if the child switches
+to another browser.
+
+| Browser | Policy key | Status |
+|---|---|---|
+| Chrome | `SOFTWARE\Policies\Google\Chrome` | Confirmed in official docs |
+| Edge | `SOFTWARE\Policies\Microsoft\Edge` | Confirmed in official docs |
+| Brave | `SOFTWARE\Policies\BraveSoftware\Brave-Browser` | **Assumed — needs verification** |
+| Whale (Naver) | `SOFTWARE\Policies\Naver\Whale` | **Assumed — needs verification** |
+| Opera | `SOFTWARE\Policies\Opera Software\Opera` | **Assumed — needs verification** |
+
+Only the confirmed `chrome` / `edge` are defaults. Putting assumed paths in the defaults would
+silently produce a "thought it was blocked but wasn't" state.
+
+To use a browser with an assumed path, **verify it first**:
+
+1. Add it to `Browsers` and restart the service
+2. Open the browser's policy page (e.g. `whale://policy`) and check that `URLBlocklist` appears
+3. If it doesn't, find the real path under `HKLM\SOFTWARE\Policies` with `regedit` and set it
+   via `RegistryKeyOverrides`
+
+```jsonc
+"BrowserPolicy": {
+  "Enabled": true,
+  "Browsers": [ "chrome", "edge", "whale" ],
+  "RegistryKeyOverrides": {
+    "whale": "SOFTWARE\\Policies\\Naver\\Whale"
+  }
+}
+```
+
+Firefox is not Chromium-based, so this approach does not work there at all (it uses a separate
+`policies.json` mechanism). Not installing browsers you don't intend to manage is the surest
+option.
+
+#### How your existing settings are protected
+
+Because this touches the registry, it follows exactly the same safety procedure as adapter DNS.
+
+```
+1. Save original values to state\browser-policy.json before writing
+   (if the save fails, the registry is left alone — never leave a change you can't undo)
+2. Never re-read the backup for a browser that already has one
+   (overwriting the "original" with our own values makes recovery impossible forever)
+3. Keep URLBlocklist entries the parent already had; only add our own
+4. When blocking lifts, remove only our entries; delete keys that didn't exist before
+```
+
+- Setting `BrowserPolicy.Enabled` back to `false` **restores everything on the next evaluation cycle.**
+- `cleanup` and uninstall restore it too (the `Browser policy restore` step).
+- With no backup present, the registry is **left untouched.** Guessing would destroy someone else's settings.
+- If someone deletes the policy from the registry, it is written back on the next cycle.
+  (Nothing is written when the contents already match, so the steady-state cost is negligible.)
+
+#### Can the child delete the policy?
+
+**No.** Writing to `HKLM` requires administrator rights, so a child on a **standard user**
+account cannot edit the registry. (If that assumption breaks, all of TimeBlocker is pointless —
+see section 5.)
+
+The browser's extensions/policy page does **show** it as "Installed by your administrator".
+Being visible and being removable are different things.
+
+---
+
 ### DNS cache
 
 The cache is flushed **only when the block/allow state actually changes.** It calls
@@ -1138,6 +1308,28 @@ Location: `%ProgramData%\TimeBlocker\timeblocker.config.json`
     "TerminateProcesses": true,
     "Domains": [ "roblox.com", "rbxcdn.com" ],
     "ProcessNames": [ "RobloxPlayerBeta.exe", "RobloxStudioBeta.exe" ]
+  },
+  "Shorts": {
+    // Shorts only. DNS can't tell paths apart, so this uses browser policy exclusively.
+    "Mode": "Schedule",                   // block shorts / auto shorts / unblock shorts
+    "UseDnsBlocking": false,              // turning this on would block all of youtube.com. Don't
+    "UseFirewallBlocking": false,
+    "UseBrowserPolicyBlocking": true,
+    "BlockedUrlPatterns": [
+      "youtube.com/shorts",               // subdomains (www / m) are covered too
+      "youtube.com/youtubei/v1/reel/"     // internal API the Shorts feed uses for the next video
+    ]
+  },
+  "BrowserPolicy": {
+    // Off by default. It touches registry policy, so it must be enabled explicitly.
+    "Enabled": false,
+    "Browsers": [ "chrome", "edge" ],     // only confirmed paths are defaults
+    "RegistryKeyOverrides": {},           // fix a wrong built-in path here
+    "DisableIncognito": true,             // closes the incognito escape hatch
+    "DisableGuestMode": true,
+    "DisableDnsOverHttps": true,          // if left on, all DNS blocking is bypassed
+    "BlockExtensionInstalls": false,      // blocks VPN/proxy extensions. Off by default (side effects)
+    "ExtensionAllowlist": []
   },
   "TemporaryPermit": { "MaxMinutes": 120, "MinMinutes": 1 },
   "Telegram": {
@@ -1532,6 +1724,15 @@ It uses exactly the same command processor as Telegram, so behavior is identical
   in Chrome / Edge / Firefox, or disable it via Group Policy.
 - **A VPN, proxy, or mobile tethering** can be used to bypass this. That's outside this program's
   scope.
+- **Shorts blocking (`shorts`) is not complete.** The browser policy `URLBlocklist` only stops
+  real page loads. Navigation that only rewrites the URL in JavaScript (SPA) inside YouTube is
+  not caught, so tapping a Shorts thumbnail from the home page can leak through. We also block
+  the internal API the Shorts feed uses to compensate, but it is not 100%, and the Shorts shelf
+  on the home page does not disappear. Complete blocking requires a force-installed extension.
+- **Browser policy applies per browser.** Switching to a browser without the policy defeats both
+  Shorts blocking and DoH blocking. Paths other than `chrome` / `edge` are unverified assumptions
+  and must be checked directly via a policy page such as `whale://policy`. Firefox is not
+  Chromium-based, so this approach does not work there.
 - **A user with an administrator account can stop the service at any time.** The child's account
   must be a **Standard user** for this to mean anything.
 - The DNS proxy only handles **UDP queries.** TCP DNS queries don't go through the proxy.
@@ -1543,7 +1744,12 @@ It uses exactly the same command processor as Telegram, so behavior is identical
 - Blocking/allowing changes may lag by up to `EvaluationIntervalSeconds` (default 10 seconds).
   A permit granted via a Telegram command takes effect immediately.
 - Perceived delay can also come from connections the browser already has open, or its own DNS
-  cache.
+  cache. **A video already playing is not cut off immediately.** DNS blocking only stops future
+  name lookups; connections already established and video already buffered keep flowing.
+  Restarting the browser blocks it at once.
+- **Browser policy changes take effect when the browser re-reads its policies.** They land in the
+  registry immediately, but an already-open browser may take a while to notice. To check right
+  away, restart the browser or hit "Reload policies" on `chrome://policy`.
 - **Stopping the service does not lift hosts / firewall blocking.** This is intentional — if
   merely stopping the service lifted blocking, it wouldn't mean anything. To fully remove it,
   run `TimeBlocker.Service.exe cleanup`.

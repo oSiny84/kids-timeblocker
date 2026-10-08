@@ -1,6 +1,7 @@
 using System.Security.Principal;
 using Microsoft.Extensions.Logging.Abstractions;
 using TimeBlocker.Service.Blocking;
+using TimeBlocker.Service.Blocking.BrowserPolicy;
 using TimeBlocker.Shared.Common;
 using TimeBlocker.Shared.Configuration;
 using TimeBlocker.Shared.Models;
@@ -54,7 +55,8 @@ public static class LocalSetupCommands
                 현재 설정을 보여줍니다. (Bot Token 은 마스킹됩니다)
 
             TimeBlocker.Service.exe cleanup
-                hosts 차단 구간과 방화벽 규칙을 제거하고, 어댑터 DNS 를 원래 설정으로 되돌립니다.
+                hosts 차단 구간과 방화벽 규칙, 브라우저 정책을 제거하고
+                어댑터 DNS 를 원래 설정으로 되돌립니다.
                 (프로그램 제거 전에 실행)
 
             TimeBlocker.Service.exe dns-restore
@@ -179,14 +181,29 @@ public static class LocalSetupCommands
         {
             var settings = config.GetTarget(target);
             Console.WriteLine(
-                $"  {target.ToDisplayName(),-8} Enabled={settings.Enabled} DNS={settings.UseDnsBlocking} " +
-                $"Firewall={settings.UseFirewallBlocking} Domains={settings.Domains.Count}");
+                $"  {target.ToDisplayName(),-8} Mode={settings.Mode.ToCommandName(),-8} DNS={settings.UseDnsBlocking} " +
+                $"Firewall={settings.UseFirewallBlocking} Domains={settings.Domains.Count} " +
+                $"BrowserPolicy={settings.UseBrowserPolicyBlocking} Urls={settings.BlockedUrlPatterns.Count}");
         }
 
         Console.WriteLine();
         Console.WriteLine("[DNS]");
         Console.WriteLine($"  Enabled={config.Dns.Enabled} Mode={config.Dns.Mode} Port={config.Dns.ProxyPort}");
         Console.WriteLine($"  Upstream={string.Join(", ", config.Dns.UpstreamServers)}");
+
+        Console.WriteLine();
+        Console.WriteLine("[BrowserPolicy]");
+        Console.WriteLine($"  Enabled={config.BrowserPolicy.Enabled}");
+        Console.WriteLine($"  Browsers={string.Join(", ", config.BrowserPolicy.Browsers)}");
+        Console.WriteLine(
+            $"  DisableIncognito={config.BrowserPolicy.DisableIncognito} " +
+            $"DisableGuestMode={config.BrowserPolicy.DisableGuestMode} " +
+            $"DisableDnsOverHttps={config.BrowserPolicy.DisableDnsOverHttps}");
+        Console.WriteLine($"  BlockExtensionInstalls={config.BrowserPolicy.BlockExtensionInstalls}");
+        foreach (var pattern in config.Shorts.BlockedUrlPatterns)
+        {
+            Console.WriteLine($"  blocked url: {pattern}");
+        }
 
         Console.WriteLine();
         Console.WriteLine("[Telegram]");
@@ -233,6 +250,7 @@ public static class LocalSetupCommands
             new FirewallManager(NullLogger<FirewallManager>.Instance),
             CreateAdapterConfigurator(),
             new Blocking.RobloxLocator(NullLogger<Blocking.RobloxLocator>.Instance),
+            new RegistryPolicyEditor(NullLogger<RegistryPolicyEditor>.Instance),
             logger);
 
         var report = await doctor.RunAsync(CancellationToken.None).ConfigureAwait(false);
@@ -252,7 +270,18 @@ public static class LocalSetupCommands
             new FirewallManager(NullLogger<FirewallManager>.Instance),
             CreateAdapterConfigurator(),
             new Blocking.DnsCacheFlusher(NullLogger<Blocking.DnsCacheFlusher>.Instance),
+            CreateBrowserPolicyManager(),
             NullLogger.Instance);
+
+    /// <summary>
+    /// 서비스 밖(cleanup / doctor)에서도 브라우저 정책을 되돌릴 수 있어야 한다.
+    /// DI 없이 직접 조립한다.
+    /// </summary>
+    private static IBrowserPolicyManager CreateBrowserPolicyManager() =>
+        new BrowserPolicyManager(
+            new RegistryPolicyEditor(NullLogger<RegistryPolicyEditor>.Instance),
+            new BrowserPolicyStateStore(NullLogger<BrowserPolicyStateStore>.Instance),
+            NullLogger<BrowserPolicyManager>.Instance);
 
     /// <summary>
     /// `dns-restore` 명령. 어댑터 DNS 만 즉시 원래대로 되돌린다.
