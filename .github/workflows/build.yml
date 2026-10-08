@@ -10,14 +10,29 @@
 #   압축만 풀고 install.bat 을 실행하면 바로 설치된다.
 name: build
 
+# 커밋 하나에 실행이 한 번만 돌게 트리거를 갈라 둔다.
+#
+# 모든 브랜치의 push 와 pull_request 를 둘 다 받으면, PR 이 열린 브랜치에 푸시할 때마다
+# 같은 커밋을 두 번 빌드한다. (push 실행 + PR 실행)
+# concurrency 는 이 둘을 묶지 못한다. github.ref 가 서로 다르기 때문이다.
+#   push         -> refs/heads/<브랜치>
+#   pull_request -> refs/pull/<번호>/merge
+#
+# 그래서 역할을 나눈다.
+#   작업 브랜치 -> PR 실행으로 검증한다
+#   main        -> 머지된 결과를 push 실행으로 검증한다
+#
+# 주의: PR 을 열기 전의 푸시는 빌드되지 않는다.
+# 그때 결과가 필요하면 Actions 탭에서 workflow_dispatch 로 직접 돌린다.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
-  # 필요할 때 Actions 탭에서 직접 돌릴 수 있게 둔다.
+  # PR 을 열기 전이거나 다시 돌려보고 싶을 때 Actions 탭에서 직접 실행한다.
   workflow_dispatch:
 
 # 같은 ref 에 새 커밋을 밀면 진행 중인 예전 실행을 취소한다.
+# 위에서 트리거를 갈라 두었으므로 PR 은 PR 실행끼리, main 은 main 실행끼리 묶인다.
 #
 # 없으면 이미 고친 커밋의 빌드가 끝까지 돌아가서, 뒤늦은 실패 보고가
 # 현재 상태인 것처럼 도착한다. (실제로 겪었다: 수정을 푸시한 2분 뒤에
