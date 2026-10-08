@@ -72,20 +72,41 @@ set /p ADMIN_ID=" User ID   : "
 
 echo.
 echo ----------------------------------------------------------
+echo.
+echo  [쇼츠만 차단]
+echo.
+echo  일반 YouTube 영상은 그대로 두고 유튜브 쇼츠만 막을 수 있습니다.
+echo  켜면 이 PC 의 브라우저에 아래가 함께 적용됩니다.
+echo.
+echo    - 쇼츠 주소 차단 (일반 영상은 그대로)
+echo    - 시크릿 모드 사용 불가
+echo    - 게스트 모드 사용 불가
+echo    - 브라우저 보안 DNS(DoH) 끄기 (안 끄면 차단이 우회됩니다)
+echo.
+echo  (Chrome / Edge 에 적용됩니다. 나중에 텔레그램 'policy off' 로 끌 수 있습니다)
+echo.
+set "BLOCK_SHORTS="
+set /p BLOCK_SHORTS=" 쇼츠도 차단할까요? (Y/N, 기본 N): "
+
+set "SHORTS_ARG="
+if /i "!BLOCK_SHORTS!"=="Y" set "SHORTS_ARG=-BlockShorts"
+
+echo.
+echo ----------------------------------------------------------
 
 if "!BOT_TOKEN!"=="" (
     echo  Telegram 설정 없이 설치합니다.
     echo  나중에 configure-telegram.bat 으로 설정할 수 있습니다.
     echo.
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-service.ps1"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-service.ps1" !SHORTS_ARG!
 ) else (
     if "!ADMIN_ID!"=="" (
         echo  User ID 가 비어 있습니다. 둘 다 입력해야 Telegram 이 켜집니다.
         echo  Telegram 설정 없이 설치합니다.
         echo.
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-service.ps1"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-service.ps1" !SHORTS_ARG!
     ) else (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-service.ps1" -BotToken "!BOT_TOKEN!" -AdminUserId !ADMIN_ID!
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-service.ps1" -BotToken "!BOT_TOKEN!" -AdminUserId !ADMIN_ID! !SHORTS_ARG!
     )
 )
 

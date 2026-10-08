@@ -23,7 +23,11 @@ param(
     [string]$BotToken,
 
     # 명령을 허용할 Telegram 숫자 User ID. 생략하면 나중에 set-admin 으로 설정한다.
-    [long]$AdminUserId = 0
+    [long]$AdminUserId = 0,
+
+    # 쇼츠만 차단하는 기능(브라우저 정책)을 설치 시점에 켠다.
+    # 생략하면 꺼진 상태로 설치되고, 나중에 텔레그램 'policy on' 으로 켤 수 있다.
+    [switch]$BlockShorts
 )
 
 $ErrorActionPreference = 'Stop'
@@ -165,6 +169,15 @@ else {
 
 if ($BotToken -and $AdminUserId -ne 0) {
     & $exePath enable-telegram
+}
+
+# 쇼츠 차단은 레지스트리 정책을 건드리므로 기본은 꺼짐이다.
+# 설치할 때 물어본 결과만 반영한다.
+if ($BlockShorts) {
+    & $exePath enable-shorts
+}
+else {
+    Write-Host "  쇼츠 차단 미사용 - 나중에 텔레그램에서 켤 수 있습니다: policy on" -ForegroundColor DarkYellow
 }
 
 # 5. 서비스 등록

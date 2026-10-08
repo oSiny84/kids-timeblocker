@@ -508,7 +508,7 @@ public sealed class DoctorService : IDiagnosticsService
             // 기능이 꺼져 있으면 아무 일도 일어나지 않으므로 반드시 알려준다.
             return config.Shorts.Mode == BlockMode.Blocked && config.Shorts.UseBrowserPolicyBlocking
                 ? DoctorCheck.Warn(name, "꺼져 있어 Shorts 차단이 적용되지 않습니다",
-                    "설정파일의 BrowserPolicy.Enabled 를 true 로 바꾸고 서비스를 재시작하세요.")
+                    "텔레그램에서 'policy on' 을 보내세요. (또는 'block shorts')")
                 : DoctorCheck.Pass(name, "사용 안 함");
         }
 

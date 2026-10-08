@@ -43,6 +43,8 @@ Windows 10 / 11 에서 **시간대별로 YouTube / Roblox 접근을 차단**하�
 2. **`install.bat`** 더블클릭 실행
    - "게시자를 확인할 수 없습니다" 같은 경고가 뜨면 **"예" / "실행"** 선택
    - Bot Token, User ID 를 물어보면 2번에서 받은 값을 붙여넣기
+   - **"쇼츠도 차단할까요?"** 를 물어봅니다 — 유튜브 쇼츠만 막고 일반 영상은 그대로
+     두고 싶으면 `Y`. 나중에 텔레그램에서 켜고 끌 수 있으니 모르겠으면 그냥 Enter
 3. 설치가 끝나면 자동으로 점검(`doctor`)이 실행됩니다
 
 ### 4) 잘 됐는지 확인
@@ -71,8 +73,8 @@ status
 | `msg 밥 먹고 하자` | PC 화면에 메시지 띄우기 |
 | `help` (또는 `list`) | 전체 명령 목록 |
 
-`block shorts` 는 **설정에서 브라우저 정책을 먼저 켜야** 동작합니다
-(10장 "쇼츠만 차단" 참고). 켜지 않은 상태로 명령하면 그 사실을 응답에 알려줍니다.
+`block shorts` 는 **필요한 브라우저 정책을 알아서 함께 켭니다.** 설정파일을 고칠 필요가 없습니다.
+설치할 때 `install.bat` 이 물어보기도 합니다. 자세한 내용은 10장 "쇼츠만 차단" 을 보세요.
 
 명령과 예시를 더 자세히 보려면 아래 **"8. Telegram 명령어"** 섹션을 참고하세요.
 
@@ -480,6 +482,7 @@ $env:TIMEBLOCKER_DATA = "D:\temp\tbdata"
 | `targets` | | 대상별 상태 (auto / block / unblock) |
 | `schedule` | `sch` | 요일별 차단 시간 |
 | `domains youtube` | | 차단 도메인 목록 |
+| `policy` | `bp` | 쇼츠 차단(브라우저 정책) 상태 |
 | `maxpermit` | | 최대 허용 시간 |
 | `admin list` | | 등록된 관리자 User ID |
 | `ping` | | 생존 확인 + uptime |
@@ -534,7 +537,8 @@ schedule default 21:00 07:00     전체 요일 기본값
 (`block` = `block all`).
 
 `shorts` 는 **쇼츠만** 막습니다. 일반 YouTube 영상은 그대로 볼 수 있습니다.
-다른 대상과 차단 방식이 완전히 달라서 별도 준비가 필요합니다 — "쇼츠만 차단" 절을 보세요.
+차단 방식이 완전히 달라서(브라우저 정책) 한계도 다릅니다 — "쇼츠만 차단" 절을 보세요.
+`block shorts` 는 필요한 정책을 알아서 함께 켜줍니다.
 
 `targets` 로 확인하면 이렇게 보입니다.
 
@@ -668,6 +672,40 @@ Adapter DNS      : Wi-Fi=127.0.0.1
 어댑터 DNS 를 원래대로 되돌리고, 차단은 hosts 방식으로 계속 유지합니다.
 프록시 방식으로 돌아가려면 `reload` 를 실행하세요.
 
+### 쇼츠 차단 켜고 끄기
+
+```
+policy             지금 상태 (어떤 브라우저에 적용됐는지, 무엇을 막는지)
+policy on          기능 켜기
+policy off         기능 끄기 (바꿔놓은 레지스트리 정책을 원래대로 되돌린다)
+```
+
+`policy` 응답 예:
+
+```
+Browser Policy : ON
+chrome, edge (시크릿 차단 / 게스트 차단 / DoH 끔)
+
+쇼츠 차단은 이 기능으로만 동작합니다.
+Shorts 상태    : block (잠금 (항상 막음))
+
+차단 URL:
+  youtube.com/shorts
+  youtube.com/youtubei/v1/reel/
+
+함께 막는 우회 경로:
+  시크릿 모드  : 차단
+  게스트 모드  : 차단
+  브라우저 DoH : 차단
+  확장 설치    : 허용
+
+끄려면: policy off
+```
+
+**`policy off` 는 바꿔놓은 레지스트리 정책을 원래 값으로 되돌립니다.**
+`Shorts` 의 상태(block / auto)는 건드리지 않으므로, 다시 `policy on` 하면
+전에 정한 대로 돌아갑니다.
+
 ### 자동 진단 (doctor)
 
 문제가 생겼을 때 원인을 빠르게 찾기 위한 종합 점검입니다.
@@ -762,6 +800,20 @@ TimeBlocker.Admin.exe youtube 30
 TimeBlocker.Admin.exe schedule mon 21:00 07:00
 TimeBlocker.Admin.exe lock
 TimeBlocker.Admin.exe logs 200
+```
+
+설치 시점에만 쓰는 로컬 전용 명령은 서비스 실행파일이 직접 받습니다.
+(Telegram 으로 바꿀 수 없거나, 서비스가 멈춰 있어도 동작해야 하는 것들)
+
+```powershell
+TimeBlocker.Service.exe set-token <BotToken>
+TimeBlocker.Service.exe set-admin <TelegramUserId>
+TimeBlocker.Service.exe enable-shorts     # 쇼츠 차단 켜기 (= policy on + block shorts)
+TimeBlocker.Service.exe disable-shorts    # 쇼츠 차단 끄기
+TimeBlocker.Service.exe show-config
+TimeBlocker.Service.exe doctor
+TimeBlocker.Service.exe cleanup
+TimeBlocker.Service.exe dns-restore
 ```
 
 - CLI 는 핵심 로직을 직접 실행하지 않습니다. **Named Pipe 로 서비스에 명령을 전달만** 합니다.
@@ -1094,28 +1146,50 @@ Windows 정식 API 만 사용합니다. 프로세스를 숨기거나 보안 기�
 
 #### 켜는 방법
 
-설정파일에서 `BrowserPolicy.Enabled` 를 `true` 로 바꾸고 서비스를 재시작합니다.
 **기본값은 꺼짐입니다.** 레지스트리 정책을 건드리는 기능이라 명시적으로 켜야 합니다.
+켜는 길은 두 가지이고, **어느 쪽이든 설정파일을 직접 고칠 필요는 없습니다.**
 
-```jsonc
-"BrowserPolicy": {
-  "Enabled": true,
-  "Browsers": [ "chrome", "edge" ]
-}
-```
-
-그다음 텔레그램에서 상태를 정합니다.
+**1) 설치할 때** — `install.bat` 이 물어봅니다.
 
 ```
-block shorts      항상 쇼츠 차단
-auto shorts       차단 시간대에만 쇼츠 차단
+ 쇼츠도 차단할까요? (Y/N, 기본 N):
+```
+
+`Y` 를 누르면 기능이 켜지고 쇼츠가 상시 차단으로 설정됩니다.
+
+**2) 나중에 텔레그램으로**
+
+```
+block shorts      쇼츠를 항상 차단 (필요한 정책도 함께 켜준다)
+auto shorts       차단 시간대에만 쇼츠 차단 (정책도 함께 켜준다)
 unblock shorts    쇼츠 차단 안 함
 shorts 30         30분만 쇼츠 열어주기
+
+policy            지금 상태 보기
+policy on         기능만 켜기
+policy off        기능 끄기 (레지스트리 정책을 원래대로 되돌린다)
 ```
 
-`status` 의 `Browser Policy` 줄과 `doctor` 의 `Browser policy` 항목으로
+`block shorts` 와 `auto shorts` 는 **필요한 브라우저 정책을 알아서 함께 켭니다.**
+쇼츠는 그 정책 없이는 전혀 막히지 않으므로, 대상을 직접 지정해 막으라고 한 것을
+동의로 봅니다. 응답에 무엇이 함께 켜졌는지(시크릿 / 게스트 / DoH 차단) 적어줍니다.
+
+> `block all` 은 정책을 켜지 않습니다. PC 전체에 적용되는 변경을 포괄 명령의
+> 부수효과로 일으키지 않기 위한 것입니다. 대신 응답에 쇼츠가 아직 안 막힌다는
+> 사실과 `policy on` 안내가 붙습니다.
+
+**확인하는 방법**
+
+`status` 의 `Browser Policy` 줄, `policy` 명령, `doctor` 의 `Browser policy` 항목으로
 실제로 적용됐는지 확인할 수 있습니다. 브라우저에서 `chrome://policy` 를 열어
 `URLBlocklist` 가 들어와 있는지 직접 봐도 됩니다.
+
+**설치 후 로컬에서 바꾸려면** (텔레그램을 쓸 수 없을 때)
+
+```powershell
+"C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" enable-shorts
+"C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" disable-shorts
+```
 
 #### 무엇이 막히고 무엇이 안 막히는가
 

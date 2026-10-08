@@ -20,6 +20,9 @@ public enum RemoteCommandType
     DnsStatus,
     DnsTest,
     Doctor,
+
+    /// <summary>브라우저 정책(쇼츠 경로 차단)이 지금 어떤 상태인지.</summary>
+    BrowserPolicyStatus,
     Ping,
     Version,
     Help,
@@ -40,6 +43,12 @@ public enum RemoteCommandType
 
     /// <summary>어댑터 DNS 를 저장된 원래 설정으로 즉시 되돌린다.</summary>
     DnsRestore,
+
+    /// <summary>
+    /// 브라우저 정책 기능을 켜거나 끈다. (쇼츠 경로 차단 + 우회 봉쇄)
+    /// 끄면 바꿔놓은 레지스트리 정책을 원래 값으로 되돌린다.
+    /// </summary>
+    SetBrowserPolicy,
 
     /// <summary>PC 화면에 메시지를 띄운다.</summary>
     SendMessage
@@ -83,6 +92,9 @@ public sealed class RemoteCommand
     /// <summary>SetMaxPermit 의 값(분).</summary>
     public int Value { get; init; }
 
+    /// <summary>SetBrowserPolicy 로 켤지 끌지.</summary>
+    public bool? Enable { get; init; }
+
     /// <summary>원본 입력 문자열. 감사 로그에 남긴다.</summary>
     public string RawText { get; init; } = string.Empty;
 
@@ -96,7 +108,8 @@ public sealed class RemoteCommand
         RemoteCommandType.SetMode or
         RemoteCommandType.AddDomain or
         RemoteCommandType.RemoveDomain or
-        RemoteCommandType.SetMaxPermit;
+        RemoteCommandType.SetMaxPermit or
+        RemoteCommandType.SetBrowserPolicy;
 
     public static RemoteCommand Invalid(string raw, string error) =>
         new() { Type = RemoteCommandType.Unknown, RawText = raw, Error = error };

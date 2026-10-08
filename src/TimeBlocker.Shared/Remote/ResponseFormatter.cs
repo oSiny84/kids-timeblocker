@@ -128,7 +128,7 @@ public static class ResponseFormatter
         대상을 빼면 전체에 적용된다. (block = block all)
 
         shorts 는 쇼츠만 막는다. 일반 YouTube 영상은 그대로 볼 수 있다.
-        (브라우저 정책을 쓰므로 BrowserPolicy.Enabled 가 켜져 있어야 한다)
+        block shorts 를 보내면 필요한 브라우저 정책도 함께 켜진다.
 
         [Temporary Allow] 지금만 잠깐 열어주기
         youtube <min>   (yt)
@@ -164,6 +164,11 @@ public static class ResponseFormatter
         dns status
         dns test
         dns restore
+
+        [Shorts] 쇼츠 차단 (브라우저 정책)
+        policy            현재 상태
+        policy on         켜기  (시크릿 / 게스트 / DoH 차단 포함)
+        policy off        끄기  (레지스트리 정책을 원래대로 되돌린다)
 
         [System]
         ping

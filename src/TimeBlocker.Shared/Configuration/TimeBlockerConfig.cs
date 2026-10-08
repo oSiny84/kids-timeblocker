@@ -137,6 +137,8 @@ public sealed class TargetSettings
     /// 기본 상태는 다른 대상과 같은 Schedule 이다.
     /// 쇼츠를 상시 차단하려면 block shorts, 시간대만 막으려면 그대로 두면 된다.
     /// 어느 쪽이든 BrowserPolicy.Enabled 가 켜져 있어야 실제로 적용된다.
+    /// 그 기능은 설치 중 질문이나 텔레그램 'policy on' / 'block shorts' 로 켜진다.
+    /// 설정파일을 직접 고치게 만들지 않는다. (이 프로그램은 대상 PC 에 설정 화면을 두지 않는다)
     /// </summary>
     public static TargetSettings CreateShortsDefault() => new()
     {

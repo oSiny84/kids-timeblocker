@@ -73,6 +73,9 @@ The PC opens no inbound ports. The service only does **outbound long polling** t
 2. Double-click **`install.bat`**
    - If a "publisher could not be verified" warning appears, choose **"Yes" / "Run"**
    - When asked for the Bot Token and User ID, paste the values from step 2
+   - It also asks **"Block Shorts too?"** — answer `Y` to block YouTube Shorts while leaving
+     regular videos alone. You can turn it on or off from Telegram later, so just press Enter
+     if you're unsure
 3. Once installation finishes, a diagnostic check (`doctor`) runs automatically
 
 ### 4) Confirm it worked
@@ -102,9 +105,8 @@ This is really all you need for day-to-day use. Swap the target for `youtube` / 
 | `msg have dinner first` | Pop a message up on the PC screen |
 | `help` (or `list`) | Full command list |
 
-`block shorts` requires **enabling browser policy in the configuration first**
-(see "Blocking Shorts only" in section 10). If you issue the command without it,
-the reply tells you so.
+`block shorts` **turns on the browser policy it needs automatically** — no config file editing.
+`install.bat` also asks at install time. See "Blocking Shorts only" in section 10.
 
 For more commands and examples, see the **"8. Telegram commands"** section below.
 
@@ -493,6 +495,7 @@ The leading slash (`/`) is optional. Commands are case-insensitive.
 | `targets` | | Per-target state (auto / block / unblock) |
 | `schedule` | `sch` | Weekly blocking hours |
 | `domains youtube` | | List of blocked domains |
+| `policy` | `bp` | Shorts blocking (browser policy) state |
 | `maxpermit` | | Maximum permit length |
 | `admin list` | | Registered admin User IDs |
 | `ping` | | Liveness check + uptime |
@@ -547,8 +550,8 @@ The target is `youtube` / `roblox` / `shorts` / `all`. Omitting the target appli
 (`block` = `block all`).
 
 `shorts` blocks **only Shorts**. Regular YouTube videos still play. It uses a completely
-different blocking mechanism from the other targets and needs separate setup — see
-"Blocking Shorts only".
+different blocking mechanism (browser policy), so its limitations differ — see
+"Blocking Shorts only". `block shorts` turns on the policy it needs automatically.
 
 Checking with `targets` looks like this:
 
@@ -683,6 +686,17 @@ Adapter DNS      : Wi-Fi=127.0.0.1
 DNS to its original setting while keeping blocking active via the hosts method. Run `reload` to
 switch back to proxy mode.
 
+### Turning Shorts blocking on and off
+
+```
+policy             current state (which browsers, what it blocks)
+policy on          turn the feature on
+policy off         turn it off (restores the registry policy to its original values)
+```
+
+**`policy off` restores the registry policy to its original values.** It leaves the `Shorts`
+state (block / auto) alone, so `policy on` resumes what you set before.
+
 ### Automatic diagnostics (doctor)
 
 A comprehensive check for quickly finding the cause when something's wrong.
@@ -777,6 +791,20 @@ TimeBlocker.Admin.exe youtube 30
 TimeBlocker.Admin.exe schedule mon 21:00 07:00
 TimeBlocker.Admin.exe block youtube
 TimeBlocker.Admin.exe logs 200
+```
+
+Local-only commands used at install time are handled by the service executable directly
+(things Telegram can't change, or that must work while the service is stopped):
+
+```powershell
+TimeBlocker.Service.exe set-token <BotToken>
+TimeBlocker.Service.exe set-admin <TelegramUserId>
+TimeBlocker.Service.exe enable-shorts     # turn Shorts blocking on (= policy on + block shorts)
+TimeBlocker.Service.exe disable-shorts    # turn Shorts blocking off
+TimeBlocker.Service.exe show-config
+TimeBlocker.Service.exe doctor
+TimeBlocker.Service.exe cleanup
+TimeBlocker.Service.exe dns-restore
 ```
 
 - The CLI does not run the core logic itself. It **only forwards commands to the service over a
@@ -1126,28 +1154,50 @@ So the `shorts` target takes a different route.
 
 #### Turning it on
 
-Set `BrowserPolicy.Enabled` to `true` in the configuration file and restart the service.
 **It is off by default** — it touches registry policy, so it must be enabled explicitly.
+There are two ways to turn it on, and **neither requires editing the configuration file.**
 
-```jsonc
-"BrowserPolicy": {
-  "Enabled": true,
-  "Browsers": [ "chrome", "edge" ]
-}
-```
-
-Then set the state over Telegram:
+**1) At install time** — `install.bat` asks:
 
 ```
-block shorts      always block Shorts
-auto shorts       block Shorts only during scheduled hours
+ Block Shorts too? (Y/N, default N):
+```
+
+Answering `Y` enables the feature and sets Shorts to always-blocked.
+
+**2) Later, over Telegram**
+
+```
+block shorts      always block Shorts (also turns on the policy it needs)
+auto shorts       block Shorts only during scheduled hours (same)
 unblock shorts    don't block Shorts
 shorts 30         open Shorts for 30 minutes
+
+policy            show current state
+policy on         turn the feature on
+policy off        turn it off (restores the registry policy to its original values)
 ```
 
-The `Browser Policy` line in `status` and the `Browser policy` item in `doctor` tell you whether
-it actually applied. You can also open `chrome://policy` in the browser to see `URLBlocklist`
-directly.
+`block shorts` and `auto shorts` **turn on the browser policy they need automatically.**
+Shorts cannot be blocked at all without it, so naming the target explicitly counts as consent.
+The reply states what else was turned on (incognito / guest / DoH blocking).
+
+> `block all` does not turn the policy on. A machine-wide change shouldn't happen as a side
+> effect of a blanket command. Instead the reply notes that Shorts isn't actually blocked yet
+> and points at `policy on`.
+
+**Checking it**
+
+The `Browser Policy` line in `status`, the `policy` command, and the `Browser policy` item in
+`doctor` all tell you whether it actually applied. You can also open `chrome://policy` in the
+browser to see `URLBlocklist` directly.
+
+**Changing it locally after install** (when Telegram isn't available)
+
+```powershell
+"C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" enable-shorts
+"C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" disable-shorts
+```
 
 #### What gets blocked and what doesn't
 

@@ -308,6 +308,49 @@ public class RemoteCommandParserTests
         Assert.Equal(new TimeSpan(7, 0, 0), command.End);
     }
 
+    // ---------------------------------------------------------------- 정책
+
+    [Theory]
+    [InlineData("policy")]
+    [InlineData("policy status")]
+    [InlineData("bp")]
+    public void Policy_Status(string input)
+    {
+        Assert.Equal(RemoteCommandType.BrowserPolicyStatus, _sut.Parse(input).Type);
+    }
+
+    [Theory]
+    [InlineData("policy on", true)]
+    [InlineData("policy enable", true)]
+    [InlineData("policy off", false)]
+    [InlineData("policy disable", false)]
+    [InlineData("POLICY ON", true)]
+    [InlineData("browserpolicy off", false)]
+    public void Policy_OnOff(string input, bool expected)
+    {
+        var command = _sut.Parse(input);
+
+        Assert.Equal(RemoteCommandType.SetBrowserPolicy, command.Type);
+        Assert.Equal(expected, command.Enable);
+    }
+
+    [Fact]
+    public void Policy_RejectsUnknownArgument()
+    {
+        var command = _sut.Parse("policy maybe");
+
+        Assert.Equal(RemoteCommandType.Unknown, command.Type);
+        Assert.Contains("Usage:", command.Error);
+    }
+
+    [Fact]
+    public void Policy_IsConfigChanging()
+    {
+        // 설정을 바꾸는 명령은 감사 로그에 남고 저장돼야 한다.
+        Assert.True(_sut.Parse("policy on").IsConfigChanging);
+        Assert.False(_sut.Parse("policy").IsConfigChanging);
+    }
+
     // ---------------------------------------------------------------- 도메인
 
     [Fact]

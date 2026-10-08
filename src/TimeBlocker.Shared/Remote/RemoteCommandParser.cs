@@ -64,6 +64,7 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
             "maxpermit" or "max" => ParseMaxPermit(raw, args),
             "admin" => ParseAdmin(raw, args),
             "dns" => ParseDns(raw, args),
+            "policy" or "browserpolicy" or "bp" => ParsePolicy(raw, args),
 
             _ => ParsePermitOrUnknown(raw, head, args)
         };
@@ -334,6 +335,39 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
             "test" or "selftest" => new RemoteCommand { Type = RemoteCommandType.DnsTest, RawText = raw },
             "restore" or "rollback" => new RemoteCommand { Type = RemoteCommandType.DnsRestore, RawText = raw },
             _ => RemoteCommand.Invalid(raw, $"ERROR\nUnknown dns command: {args[0]}\n\n{usage}")
+        };
+    }
+
+    // ---------------------------------------------------------------- policy
+
+    /// <summary>
+    /// "policy"        현재 브라우저 정책 상태
+    /// "policy on"     쇼츠 경로 차단 + 우회 봉쇄를 켠다
+    /// "policy off"    끈다. 바꿔놓은 레지스트리 정책을 원래 값으로 되돌린다.
+    ///
+    /// 쇼츠 차단은 레지스트리 정책에 의존하므로, 이 기능을 PC 앞에 앉지 않고
+    /// 켜고 끌 수 있어야 한다. 설정파일을 직접 고치게 만들면 안 된다.
+    /// </summary>
+    private static RemoteCommand ParsePolicy(string raw, string[] args)
+    {
+        const string usage = "Usage:\npolicy\npolicy on\npolicy off";
+
+        if (args.Length == 0)
+        {
+            return new RemoteCommand { Type = RemoteCommandType.BrowserPolicyStatus, RawText = raw };
+        }
+
+        return args[0].ToLowerInvariant() switch
+        {
+            "status" or "s" => new RemoteCommand { Type = RemoteCommandType.BrowserPolicyStatus, RawText = raw },
+
+            "on" or "enable" or "start" =>
+                new RemoteCommand { Type = RemoteCommandType.SetBrowserPolicy, Enable = true, RawText = raw },
+
+            "off" or "disable" or "stop" =>
+                new RemoteCommand { Type = RemoteCommandType.SetBrowserPolicy, Enable = false, RawText = raw },
+
+            _ => RemoteCommand.Invalid(raw, $"ERROR\nUnknown policy command: {args[0]}\n\n{usage}")
         };
     }
 

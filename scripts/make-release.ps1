@@ -174,14 +174,17 @@ TimeBlocker $Version 설치 안내
  일반 YouTube 영상은 그대로 두고 쇼츠만 막는 기능입니다.
  쇼츠는 주소의 경로(/shorts)로만 구분되므로 브라우저 정책을 써야 합니다.
 
- 켜는 방법:
-  1. 설정파일을 메모장으로 엽니다
-     C:\ProgramData\TimeBlocker\timeblocker.config.json
-  2. "BrowserPolicy" 안의 "Enabled" 를 false -> true 로 바꿉니다
-  3. 저장한 뒤 PC 를 재시작하거나, 관리자 명령 프롬프트에서
-     sc stop TimeBlocker  그리고  sc start TimeBlocker
-  4. 텔레그램에서 block shorts 를 보냅니다
-  5. doctor.bat 으로 Browser policy 항목이 PASS 인지 확인합니다
+ 켜는 방법 (설정파일을 고칠 필요는 없습니다):
+  - 설치할 때 "쇼츠도 차단할까요?" 에 Y 를 누르면 켜집니다
+  - 나중에 켜려면 텔레그램에서 block shorts 를 보내면 됩니다
+    (필요한 정책을 알아서 함께 켜줍니다)
+  - doctor.bat 으로 Browser policy 항목이 PASS 인지 확인하세요
+
+ 관련 텔레그램 명령:
+  policy          지금 상태 보기
+  policy on       기능만 켜기
+  policy off      기능 끄기 (바꿔놓은 정책을 원래대로 되돌립니다)
+  auto shorts     상시 차단이 아니라 차단 시간대에만 막기
 
  함께 막히는 것: 시크릿 모드 / 게스트 모드 / 브라우저 DoH
  (이것들을 열어두면 쇼츠 차단이 그대로 우회됩니다)
@@ -203,6 +206,8 @@ TimeBlocker $Version 설치 안내
  youtube 30          YouTube 30분 허용
  roblox 60           Roblox 60분 허용
  shorts 30           쇼츠만 30분 허용
+
+ policy              쇼츠 차단 기능 상태 (policy on / policy off 로 켜고 끄기)
 
  schedule mon-thu 21:00 07:00
  schedule sat off
