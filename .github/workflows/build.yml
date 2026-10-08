@@ -17,6 +17,16 @@ on:
   # 필요할 때 Actions 탭에서 직접 돌릴 수 있게 둔다.
   workflow_dispatch:
 
+# 같은 ref 에 새 커밋을 밀면 진행 중인 예전 실행을 취소한다.
+#
+# 없으면 이미 고친 커밋의 빌드가 끝까지 돌아가서, 뒤늦은 실패 보고가
+# 현재 상태인 것처럼 도착한다. (실제로 겪었다: 수정을 푸시한 2분 뒤에
+# 수정 전 커밋의 실패 알림이 왔다)
+# 러너 시간도 그만큼 낭비된다.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     runs-on: windows-latest
