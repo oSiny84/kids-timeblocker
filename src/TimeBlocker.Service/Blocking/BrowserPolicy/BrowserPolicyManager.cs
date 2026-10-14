@@ -504,15 +504,64 @@ public sealed class BrowserPolicyManager : IBrowserPolicyManager
         var targets = ResolveTargets(config.BrowserPolicy, warn: false);
         if (targets.Count == 0) return "Enabled (적용 가능한 브라우저 없음)";
 
-        var guards = new List<string>();
-        if (config.BrowserPolicy.DisableIncognito) guards.Add("시크릿 차단");
-        if (config.BrowserPolicy.DisableGuestMode) guards.Add("게스트 차단");
-        if (config.BrowserPolicy.DisableDnsOverHttps) guards.Add("DoH 끔");
-        if (config.BrowserPolicy.BlockExtensionInstalls) guards.Add("확장 설치 차단");
+        // 설정에 뭐라고 적혀 있는지가 아니라 레지스트리에 실제로 들어가 있는지를 읽는다.
+        // 설정만 보여주면 "켰다는데 왜 쇼츠가 되냐" 를 알 수 없고,
+        // 사용자가 chrome://policy 를 직접 열어보게 만든다.
+        var lines = new List<string>();
 
-        var browsers = string.Join(", ", targets.Select(t => t.BrowserId));
-        var guardText = guards.Count > 0 ? string.Join(" / ", guards) : "우회 봉쇄 없음";
+        foreach (var (browserId, registryKey) in targets)
+        {
+            lines.Add($"  {browserId,-7}: {DescribeBrowserState(registryKey)}");
+        }
 
-        return $"{browsers} ({guardText})";
+        return "Enabled" + Environment.NewLine + string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>
+    /// 브라우저 하나에 지금 무엇이 들어가 있는지를 레지스트리에서 직접 읽어 한 줄로 만든다.
+    /// 읽기에 실패해도 상태 조회가 깨지면 안 되므로 예외를 밖으로 내보내지 않는다.
+    /// </summary>
+    private string DescribeBrowserState(string registryKey)
+    {
+        try
+        {
+            // 키 자체가 없으면 우리가 쓴 것이 하나도 없다는 뜻이다. 그대로 알린다.
+            if (!_registry.KeyExists(registryKey))
+            {
+                return "정책 없음 (쓰기가 되지 않았거나 아직 적용 전)";
+            }
+
+            var applied = new List<string>();
+
+            var urls = _registry.ReadList($@"{registryKey}\{PolicyNames.UrlBlocklist}");
+            applied.Add(urls is null or { Count: 0 }
+                ? "차단 URL 없음"
+                : $"차단 URL {urls.Count}개");
+
+            if (_registry.ReadValue(registryKey, PolicyNames.IncognitoModeAvailability) == PolicyValue.Dword(1))
+            {
+                applied.Add("시크릿 차단");
+            }
+            if (_registry.ReadValue(registryKey, PolicyNames.BrowserGuestModeEnabled) == PolicyValue.Dword(0))
+            {
+                applied.Add("게스트 차단");
+            }
+            if (_registry.ReadValue(registryKey, PolicyNames.DnsOverHttpsMode) == PolicyValue.Text("off"))
+            {
+                applied.Add("DoH 끔");
+            }
+            if ((_registry.ReadList($@"{registryKey}\{PolicyNames.ExtensionInstallBlocklist}") ?? Array.Empty<string>())
+                .Contains(AllExtensions, StringComparer.Ordinal))
+            {
+                applied.Add("확장 설치 차단");
+            }
+
+            return string.Join(" / ", applied);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, @"HKLM\{Key} 를 읽지 못했습니다.", registryKey);
+            return "읽기 실패 (권한 확인 필요)";
+        }
     }
 }

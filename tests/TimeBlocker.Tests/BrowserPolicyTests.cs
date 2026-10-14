@@ -386,6 +386,55 @@ public class BrowserPolicyTests
         Assert.All(defaults, id => Assert.False(BrowserProfiles.IsUnverified(id)));
     }
 
+    // ================================================================= 상태 표시
+
+    [Fact]
+    public void Describe_ReadsBackWhatIsActuallyInTheRegistry()
+    {
+        // 설정에 뭐라고 적혀 있는지가 아니라 레지스트리에 실제로 들어간 것을 보여줘야 한다.
+        // 그래야 "켰다는데 왜 쇼츠가 되냐" 를 명령 하나로 알 수 있다.
+        var (manager, _, _) = Create();
+        var config = Config();
+
+        manager.Apply(config, new[] { "youtube.com/shorts", "youtube.com/youtubei/v1/reel/" });
+
+        var text = manager.Describe(config);
+
+        Assert.Contains("chrome", text);
+        Assert.Contains("차단 URL 2개", text);
+        Assert.Contains("시크릿 차단", text);
+    }
+
+    [Fact]
+    public void Describe_SaysSoWhenNothingWasWritten()
+    {
+        // 기능은 켜져 있는데 레지스트리에 아무것도 없는 상태.
+        // 쓰기가 실패했거나 아직 적용 전이다. 그대로 알려야 한다.
+        var registry = new FakeRegistry();
+        var manager = new BrowserPolicyManager(
+            registry, new InMemoryStateStore(), NullLogger<BrowserPolicyManager>.Instance);
+
+        var text = manager.Describe(Config());
+
+        Assert.Contains("정책 없음", text);
+    }
+
+    [Fact]
+    public void Describe_SaysNoBlockedUrls_WhenShortsIsCurrentlyAllowed()
+    {
+        // 차단 시간이 아니면 URL 목록이 비어 있는 것이 정상이다.
+        // 우회 봉쇄는 그대로 적용돼 있어야 한다.
+        var (manager, _, _) = Create();
+        var config = Config();
+
+        manager.Apply(config, Array.Empty<string>());
+
+        var text = manager.Describe(config);
+
+        Assert.Contains("차단 URL 없음", text);
+        Assert.Contains("시크릿 차단", text);
+    }
+
     // ================================================================= 헬퍼
 
     private static (BrowserPolicyManager Manager, FakeRegistry Registry, InMemoryStateStore Store) Create()
