@@ -1,0 +1,95 @@
+# v* 태그를 밀면 빌드해서 GitHub Release 로 올린다.
+#
+# 왜 CI 가 만드는가:
+#   릴리즈 파일은 테스트를 통과한 커밋에서 나온 것이어야 한다.
+#   손으로 만든 zip 을 올리면 "무엇으로 빌드했는지" 를 아무도 보증할 수 없다.
+#   make-release.ps1 은 build.ps1 을 거치고, 테스트가 실패하면 zip 을 만들지 않는다.
+#
+# 태그에 하이픈이 있으면 시험판(pre-release)으로 올린다.
+#   v1.3.0        정식 릴리즈 ("최신 릴리즈" 로 잡힌다)
+#   v1.3.0-rc.1   시험판 ("최신 릴리즈" 로 잡히지 않는다)
+#
+# 릴리즈 생성은 러너에 들어 있는 gh 로 한다. 제3자 액션을 쓰지 않는다.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+# gh release create 가 릴리즈를 만들 수 있어야 한다.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: .NET 8 SDK 설치
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 빌드 + 단위 테스트 + 게시
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      # zip 이름에 태그를 그대로 쓴다. 시험판을 정식 버전으로 착각하지 않게 한다.
+      # (v1.3.0-rc.1 -> TimeBlocker-1.3.0-rc.1.zip)
+      - name: 설치용 zip 생성
+        shell: pwsh
+        run: ./scripts/make-release.ps1 -SkipBuild -Version ($env:GITHUB_REF_NAME -replace '^v', '')
+
+      - name: 릴리즈 올리기
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = (Get-ChildItem release/*.zip | Select-Object -First 1).FullName
+          if (-not $zip) { throw "릴리즈에 올릴 zip 을 찾지 못했습니다." }
+
+          $lines = @(
+            '## 설치',
+            '',
+            '1. 아래 zip 을 받아 압축을 풉니다',
+            '2. `install.bat` 을 실행합니다 (게시자 확인 경고가 뜨면 "예" / "실행")',
+            '3. Bot Token 과 User ID 를 입력합니다',
+            '4. **"쇼츠도 차단할까요?"** 에 답합니다 (`Y` 면 쇼츠만 차단이 켜집니다)',
+            '5. 설치가 끝나면 자동으로 점검(`doctor`)이 실행됩니다',
+            '',
+            '필요한 것: .NET 8 Desktop Runtime, Telegram Bot Token.',
+            'zip 안의 `설치안내.txt` 에 더 자세히 적혀 있습니다.',
+            '',
+            '## 쇼츠 차단의 한계',
+            '',
+            '주소를 직접 입력하거나 링크를 눌러 들어가는 경로는 막힙니다.',
+            '다만 유튜브 홈에서 쇼츠 썸네일을 눌러 들어가는 경로는 새어나갈 수 있습니다.',
+            '브라우저 정책은 실제 페이지 로드만 막기 때문입니다. 자세한 내용은 README 14장을 보세요.',
+            '',
+            '## 되돌리기',
+            '',
+            '- 쇼츠 차단만 끄기: 텔레그램 `policy off`',
+            '- 전부 원래대로: `uninstall.bat`'
+          )
+
+          $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          $lines | Out-File -FilePath $notesPath -Encoding utf8
+
+          $ghArgs = @(
+            'release', 'create', $env:GITHUB_REF_NAME, $zip,
+            '--title', $env:GITHUB_REF_NAME,
+            '--notes-file', $notesPath
+          )
+
+          # 하이픈이 있는 태그는 시험판으로 올린다. (v1.3.0-rc.1)
+          if ($env:GITHUB_REF_NAME -like '*-*') {
+            $ghArgs += '--prerelease'
+            Write-Host "시험판(pre-release)으로 올립니다: $env:GITHUB_REF_NAME"
+          }
+          else {
+            Write-Host "정식 릴리즈로 올립니다: $env:GITHUB_REF_NAME"
+          }
+
+          gh @ghArgs
