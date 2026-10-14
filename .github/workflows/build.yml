@@ -66,10 +66,15 @@ jobs:
         shell: pwsh
         run: ./scripts/make-release.ps1 -SkipBuild
 
+      # 이름에 실제 커밋 SHA 를 쓴다.
+      #
+      # github.sha 를 그대로 쓰면 안 된다. pull_request 이벤트에서 그 값은 PR 을 base 에
+      # 가상으로 머지한 임시 커밋이라, 저장소에 존재하지 않는 SHA 가 이름에 박힌다.
+      # 받는 사람이 커밋 목록과 대조할 수 없어서 "이게 내 빌드인가" 를 알 수 없다.
       - name: zip 올리기
         uses: actions/upload-artifact@v4
         with:
-          name: TimeBlocker-${{ github.sha }}
+          name: TimeBlocker-installer-${{ github.event.pull_request.head.sha || github.sha }}
           path: release/*.zip
           if-no-files-found: error
           retention-days: 14
