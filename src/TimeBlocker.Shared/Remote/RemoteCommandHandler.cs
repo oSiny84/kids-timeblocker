@@ -176,9 +176,15 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
 
         // 상태와 "왜 그런지"를 같은 줄에 적는다.
         // 결과만 보여주면 "스케줄이 맞는데 왜 안 막히냐" 는 혼동이 반복된다.
+        var shortsNotEnforced = false;
         foreach (var decision in _policy.EvaluateAll())
         {
-            var state = ResponseFormatter.BlockedOrAllowed(decision.IsBlocked);
+            // 판정은 BLOCKED 인데 그것을 실행할 수단이 꺼져 있을 수 있다.
+            // 그대로 BLOCKED 라고만 적으면 상태 화면이 거짓말을 한다.
+            var notEnforced = IsBlockedButNotEnforced(config, decision);
+            shortsNotEnforced |= notEnforced;
+
+            var state = notEnforced ? "BLOCKED*" : ResponseFormatter.BlockedOrAllowed(decision.IsBlocked);
             var why = decision.Reason switch
             {
                 AccessReason.AlwaysOpen => "unblock · 항상 열어둠",
@@ -189,6 +195,14 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
                 _ => "auto · 지금은 차단 시간 아님"
             };
             builder.AppendLine($"{decision.Target.ToDisplayName(),-12}: {state,-8}({why})");
+        }
+
+        if (shortsNotEnforced)
+        {
+            builder.AppendLine();
+            builder.AppendLine("* Shorts 는 BLOCKED 로 돼 있지만 실제로는 막히지 않습니다.");
+            builder.AppendLine("  쇼츠는 브라우저 정책으로만 막을 수 있는데 그 기능이 꺼져 있습니다.");
+            builder.AppendLine("  켜려면: policy on");
         }
 
         builder.AppendLine();
@@ -238,7 +252,19 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         foreach (var target in BlockTargets.Real)
         {
             var mode = config.GetTarget(target).Mode;
-            builder.AppendLine($"{target.ToDisplayName(),-8}: {mode.ToCommandName(),-8}{mode.ToDisplayName()}");
+            var mark = target == BlockTarget.Shorts && mode != BlockMode.Open && !IsShortsEnforceable(config)
+                ? "  * 실제로는 적용 안 됨"
+                : string.Empty;
+
+            builder.AppendLine(
+                $"{target.ToDisplayName(),-8}: {mode.ToCommandName(),-8}{mode.ToDisplayName()}{mark}");
+        }
+
+        if (config.Shorts.Mode != BlockMode.Open && !IsShortsEnforceable(config))
+        {
+            builder.AppendLine();
+            builder.AppendLine("* 쇼츠는 브라우저 정책으로만 막을 수 있는데 그 기능이 꺼져 있습니다.");
+            builder.AppendLine("  켜려면: policy on");
         }
 
         builder.AppendLine();
@@ -452,6 +478,23 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
     }
 
     /// <summary>
+    /// 쇼츠 차단이 실제로 동작할 수 있는 상태인지.
+    /// 브라우저 정책이 꺼져 있거나 대상이 그것을 쓰지 않으면 아무것도 막히지 않는다.
+    /// </summary>
+    private static bool IsShortsEnforceable(TimeBlockerConfig config) =>
+        config.BrowserPolicy.Enabled && config.Shorts.UseBrowserPolicyBlocking;
+
+    /// <summary>
+    /// 판정은 차단인데 그것을 실행할 수단이 없는 상태인지.
+    ///
+    /// 쇼츠는 브라우저 정책으로만 막힌다. 그 기능이 꺼져 있으면 판정 엔진은 BLOCKED 를
+    /// 돌려주지만 실제로는 아무것도 막히지 않는다. 상태 화면이 그 차이를 감추면
+    /// "막았는데 쇼츠가 그대로 되네" 가 된다. 실제로 그런 보고를 받았다.
+    /// </summary>
+    private static bool IsBlockedButNotEnforced(TimeBlockerConfig config, AccessDecision decision) =>
+        decision.Target == BlockTarget.Shorts && decision.IsBlocked && !IsShortsEnforceable(config);
+
+    /// <summary>
     /// Shorts 를 막으라고 했지만 브라우저 정책이 꺼져 있어 실제로는 적용되지 않는 경우의 안내.
     /// 해당 없으면 null.
     ///
@@ -462,7 +505,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
     {
         if (!applied.Contains(BlockTarget.Shorts)) return null;
         if (config.Shorts.Mode == BlockMode.Open) return null;
-        if (config.BrowserPolicy.Enabled && config.Shorts.UseBrowserPolicyBlocking) return null;
+        if (IsShortsEnforceable(config)) return null;
 
         return "※ Shorts 는 아직 실제로 막히지 않습니다.\n" +
                "   쇼츠는 URL 경로를 봐야 해서 브라우저 정책이 필요합니다.\n" +

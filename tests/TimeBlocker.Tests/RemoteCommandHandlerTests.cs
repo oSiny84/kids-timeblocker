@@ -216,6 +216,55 @@ public class RemoteCommandHandlerTests : IDisposable
     // ------------------------------------------------------- policy 명령
 
     [Fact]
+    public async Task Status_MarksShortsThatIsBlockedButNotActuallyEnforced()
+    {
+        // 실제로 겪은 문제: block all 로 전부 막은 뒤 status 를 보면 Shorts 가 BLOCKED 로
+        // 보이는데, 브라우저 정책이 꺼져 있어서 쇼츠는 그대로 나왔다.
+        // 상태 화면이 그 차이를 감추면 안 된다.
+        await RunAsync("block all");
+
+        var response = await RunAsync("status");
+
+        Assert.Contains("BLOCKED*", response);
+        Assert.Contains("실제로는 막히지 않습니다", response);
+        Assert.Contains("policy on", response);
+    }
+
+    [Fact]
+    public async Task Status_DoesNotMarkShorts_WhenPolicyIsOn()
+    {
+        await RunAsync("policy on");
+        await RunAsync("block all");
+
+        var response = await RunAsync("status");
+
+        Assert.DoesNotContain("BLOCKED*", response);
+        Assert.DoesNotContain("실제로는 막히지 않습니다", response);
+    }
+
+    [Fact]
+    public async Task Status_DoesNotMarkShorts_WhenShortsIsUnblocked()
+    {
+        // 막으라고 한 적이 없으면 경고할 일도 없다.
+        await RunAsync("unblock shorts");
+
+        var response = await RunAsync("status");
+
+        Assert.DoesNotContain("BLOCKED*", response);
+    }
+
+    [Fact]
+    public async Task Targets_MarksShortsThatIsNotActuallyEnforced()
+    {
+        await RunAsync("block all");
+
+        var response = await RunAsync("targets");
+
+        Assert.Contains("실제로는 적용 안 됨", response);
+        Assert.Contains("policy on", response);
+    }
+
+    [Fact]
     public async Task Policy_Status_ShowsOffByDefault()
     {
         var response = await RunAsync("policy");
