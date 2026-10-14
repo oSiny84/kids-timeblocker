@@ -1,22 +1,33 @@
-# v* 태그를 밀면 빌드해서 GitHub Release 로 올린다.
+# 빌드해서 GitHub Release 로 올린다.
 #
 # 왜 CI 가 만드는가:
 #   릴리즈 파일은 테스트를 통과한 커밋에서 나온 것이어야 한다.
 #   손으로 만든 zip 을 올리면 "무엇으로 빌드했는지" 를 아무도 보증할 수 없다.
 #   make-release.ps1 은 build.ps1 을 거치고, 테스트가 실패하면 zip 을 만들지 않는다.
 #
+# 두 가지로 돌릴 수 있다.
+#   1. v* 태그를 푸시한다 (로컬에서 릴리즈할 때)
+#   2. Actions 탭에서 Run workflow 로 태그 이름을 입력한다
+#      태그가 없어도 된다. gh release create 가 지정한 커밋에 태그까지 만든다.
+#
 # 태그에 하이픈이 있으면 시험판(pre-release)으로 올린다.
 #   v1.3.0        정식 릴리즈 ("최신 릴리즈" 로 잡힌다)
-#   v1.3.0-rc.1   시험판 ("최신 릴리즈" 로 잡히지 않는다)
+#   v1.3.0-rc.1   시험판 (잡히지 않는다)
 #
-# 릴리즈 생성은 러너에 들어 있는 gh 로 한다. 제3자 액션을 쓰지 않는다.
+# 릴리즈 생성은 러너에 들어 있는 gh 로 한다. 제3자 액션을 끌어오지 않는다.
 name: release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '릴리즈 태그 (예: v1.3.0-rc.1). 하이픈이 있으면 시험판으로 올립니다.'
+        required: true
+        type: string
 
-# gh release create 가 릴리즈를 만들 수 있어야 한다.
+# gh release create 가 릴리즈와 태그를 만들 수 있어야 한다.
 permissions:
   contents: write
 
@@ -26,6 +37,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # 태그 이름은 환경변수로 받는다. 스크립트에 직접 끼워넣으면
+      # 입력에 따옴표가 섞였을 때 명령이 바뀔 수 있다.
+      - name: 태그 결정
+        shell: pwsh
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          $tag = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:INPUT_TAG } else { $env:GITHUB_REF_NAME }
+          $tag = "$tag".Trim()
+
+          # 형식을 확인한다. 엉뚱한 이름으로 릴리즈가 생기면 되돌리기가 번거롭다.
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') {
+            throw "태그는 v1.2.3 또는 v1.2.3-rc.1 형식이어야 합니다. 받은 값: '$tag'"
+          }
+
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "릴리즈 태그: $tag"
 
       - name: .NET 8 SDK 설치
         uses: actions/setup-dotnet@v4
@@ -40,14 +70,14 @@ jobs:
       # (v1.3.0-rc.1 -> TimeBlocker-1.3.0-rc.1.zip)
       - name: 설치용 zip 생성
         shell: pwsh
-        run: ./scripts/make-release.ps1 -SkipBuild -Version ($env:GITHUB_REF_NAME -replace '^v', '')
+        run: ./scripts/make-release.ps1 -SkipBuild -Version ($env:TAG -replace '^v', '')
 
       - name: 릴리즈 올리기
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $zip = (Get-ChildItem release/*.zip | Select-Object -First 1).FullName
+          $zip = (Get-ChildItem release/*.zip | Select-Object -First 1)
           if (-not $zip) { throw "릴리즈에 올릴 zip 을 찾지 못했습니다." }
 
           $lines = @(
@@ -66,7 +96,7 @@ jobs:
             '',
             '주소를 직접 입력하거나 링크를 눌러 들어가는 경로는 막힙니다.',
             '다만 유튜브 홈에서 쇼츠 썸네일을 눌러 들어가는 경로는 새어나갈 수 있습니다.',
-            '브라우저 정책은 실제 페이지 로드만 막기 때문입니다. 자세한 내용은 README 14장을 보세요.',
+            '브라우저 정책은 실제 페이지 로드만 막기 때문입니다. README 14장에 적어 두었습니다.',
             '',
             '## 되돌리기',
             '',
@@ -77,19 +107,30 @@ jobs:
           $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           $lines | Out-File -FilePath $notesPath -Encoding utf8
 
+          # 이미 있는 릴리즈면 파일만 갈아끼운다. 같은 태그로 다시 돌릴 때 실패하지 않게 한다.
+          gh release view $env:TAG 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "릴리즈가 이미 있습니다. 파일만 올립니다: $env:TAG"
+            gh release upload $env:TAG $zip.FullName --clobber
+            if ($LASTEXITCODE -ne 0) { throw "릴리즈 파일 업로드 실패" }
+            exit 0
+          }
+
           $ghArgs = @(
-            'release', 'create', $env:GITHUB_REF_NAME, $zip,
-            '--title', $env:GITHUB_REF_NAME,
-            '--notes-file', $notesPath
+            'release', 'create', $env:TAG, $zip.FullName,
+            '--title', $env:TAG,
+            '--notes-file', $notesPath,
+            '--target', $env:GITHUB_SHA
           )
 
           # 하이픈이 있는 태그는 시험판으로 올린다. (v1.3.0-rc.1)
-          if ($env:GITHUB_REF_NAME -like '*-*') {
+          if ($env:TAG -like '*-*') {
             $ghArgs += '--prerelease'
-            Write-Host "시험판(pre-release)으로 올립니다: $env:GITHUB_REF_NAME"
+            Write-Host "시험판(pre-release)으로 올립니다: $env:TAG"
           }
           else {
-            Write-Host "정식 릴리즈로 올립니다: $env:GITHUB_REF_NAME"
+            Write-Host "정식 릴리즈로 올립니다: $env:TAG"
           }
 
           gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { throw "릴리즈 생성 실패" }
