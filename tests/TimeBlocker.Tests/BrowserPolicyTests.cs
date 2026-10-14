@@ -144,9 +144,28 @@ public class BrowserPolicyTests
     {
         // 1.3.0-rc.1 은 URLBlocklist 로 /shorts 를 막으려 했다. 실제 PC 에서 통하지 않아
         // 확장 강제 설치로 바꿨다. 올라온 설치에 남아 있는 그 항목을 걷어내야 한다.
-        var (manager, registry, _) = Create();
+        //
+        // 그 상태를 그대로 재현한다. 레지스트리에 값만 넣으면 안 된다.
+        // 그러면 백업이 그것을 "부모가 원래 넣어둔 항목" 으로 기록해 보존해 버린다.
+        // 실제 업그레이드에서는 백업 파일이 이미 "원래 없었음" 이라고 적고 있다.
+        var registry = new FakeRegistry();
+        var store = new InMemoryStateStore();
 
         registry.WriteList(ChromeUrls, new[] { "youtube.com/shorts" });
+        store.Save(new BrowserPolicySnapshot
+        {
+            Browsers =
+            {
+                new BrowserPolicyBackup
+                {
+                    BrowserId = "chrome",
+                    RegistryKey = ChromeKey,
+                    Lists = { PolicyListBackup.Absent(PolicyNames.UrlBlocklist) }
+                }
+            }
+        });
+
+        var manager = new BrowserPolicyManager(registry, store, NullLogger<BrowserPolicyManager>.Instance);
 
         manager.Apply(Config(), new[] { ShortsExtension });
 
