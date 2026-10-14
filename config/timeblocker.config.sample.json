@@ -103,9 +103,8 @@
     "UseFirewallBlocking": false,
     "TerminateProcesses": false,
     "UseBrowserPolicyBlocking": true,
-    "BlockedUrlPatterns": [
-      "youtube.com/shorts",
-      "youtube.com/youtubei/v1/reel/"
+    "ForcedExtensions": [
+      "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
     ],
     "Domains": [],
     "ProcessNames": [],

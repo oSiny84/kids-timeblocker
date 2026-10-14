@@ -1138,32 +1138,43 @@ channel can only do two things: "receive notifications" and "send a reply." Ther
 change settings or unblock anything through it. To prevent spam, replies are rate-limited to a
 10-second cooldown and 20 per hour.
 
-### Blocking Shorts only — browser policy
+### Blocking Shorts only — force-installed extension
 
 **Shorts cannot be blocked with DNS.** Shorts and regular videos use the same `youtube.com`,
 the same `googlevideo.com`, and even the same TLS connection. DNS blocking works at the domain
 level, so blocking `youtube.com` kills all of YouTube, and not blocking it leaves Shorts open.
-The only mechanism that can see the path (`/shorts/...`) is **browser policy**.
+The only mechanism that can block part of a site is **browser policy**.
 
 So the `shorts` target takes a different route.
 
 | Target | Blocking mechanism |
 |---|---|
 | YouTube / Roblox | DNS (domains) + firewall + process termination |
-| Shorts | Browser policy (`URLBlocklist` in the HKLM registry) |
+| Shorts | Browser policy that **force-installs a Shorts-removing extension** |
+
+A force-installed extension **cannot be removed or disabled by the child.** When blocking lifts,
+it drops off the list and Chrome uninstalls it, so it follows the schedule too.
+
+> **Why an extension and not URL blocking**
+>
+> This started out using the `URLBlocklist` policy on the `/shorts` path. **It did not work on a
+> real PC.** That policy only stops real page loads, and YouTube navigates by rewriting the URL
+> inside the page. Typing `youtube.com/shorts` in the address bar is blocked, but tapping a
+> Shorts thumbnail from the home page goes straight through — and that is the path a child
+> actually uses, so it blocked almost nothing in practice.
+>
+> An extension runs inside the page, so it catches that path too. Hence the change.
 
 #### Turning it on
 
 **It is off by default** — it touches registry policy, so it must be enabled explicitly.
-There are two ways to turn it on, and **neither requires editing the configuration file.**
+There are two ways, and **neither requires editing the configuration file.**
 
 **1) At install time** — `install.bat` asks:
 
 ```
  Block Shorts too? (Y/N, default N):
 ```
-
-Answering `Y` enables the feature and sets Shorts to always-blocked.
 
 **2) Later, over Telegram**
 
@@ -1178,19 +1189,23 @@ policy on         turn the feature on
 policy off        turn it off (restores the registry policy to its original values)
 ```
 
-`block shorts` and `auto shorts` **turn on the browser policy they need automatically.**
-Shorts cannot be blocked at all without it, so naming the target explicitly counts as consent.
-The reply states what else was turned on (incognito / guest / DoH blocking).
-
-> `block all` does not turn the policy on. A machine-wide change shouldn't happen as a side
-> effect of a blanket command. Instead the reply notes that Shorts isn't actually blocked yet
-> and points at `policy on`.
+> `block all` does not turn the policy on — a machine-wide change shouldn't happen as a side
+> effect of a blanket command. Instead `status` and `targets` show `BLOCKED*` and point at
+> `policy on`.
 
 **Checking it**
 
-The `Browser Policy` line in `status`, the `policy` command, and the `Browser policy` item in
-`doctor` all tell you whether it actually applied. You can also open `chrome://policy` in the
-browser to see `URLBlocklist` directly.
+`policy` reads back **what is actually in the registry**:
+
+```
+Browser Policy:
+Enabled
+  chrome : 강제 설치 확장 1개 / 시크릿 차단 / 게스트 차단 / DoH 끔
+  edge   : 정책 없음 (쓰기가 되지 않았거나 아직 적용 전)
+```
+
+The `Browser policy` item in `doctor` reports the same, and you can open `chrome://policy`
+in the browser to see it directly.
 
 **Changing it locally after install** (when Telegram isn't available)
 
@@ -1199,42 +1214,37 @@ browser to see `URLBlocklist` directly.
 "C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" disable-shorts
 ```
 
-#### What gets blocked and what doesn't
+#### Which extension
 
-Two patterns go in by default:
+The default is **Remove YouTube Shorts**:
 
 ```
-youtube.com/shorts            the Shorts watch page
-youtube.com/youtubei/v1/reel/ the internal API the Shorts feed uses to fetch the next video
+mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx
 ```
 
-A host entry covers its subdomains, so `youtube.com/shorts` alone catches both
-`www.youtube.com/shorts/<id>` and `m.youtube.com/shorts/<id>`.
+The format is Chromium's `<extension id>;<update url>`; Web Store extensions use the URL above.
+Change it via `Shorts.ForcedExtensions`. Extension IDs are visible in `chrome://extensions`
+with **Developer mode** on.
 
-| Situation | Result |
-|---|---|
-| Typing a Shorts URL in the address bar | Blocked |
-| Opening a Shorts link in a new tab / reloading | Blocked |
-| Regular YouTube videos (`/watch`) | **Still work** (intended) |
-| Tapping a Shorts thumbnail from the YouTube home page | **Not blocked if no page load happens** |
-| The Shorts shelf on the home page | Still visible |
+Malformed entries are silently ignored by Chromium, so they are filtered out before writing and
+logged. (An extension ID is 32 lowercase letters `a`–`p`.)
 
-Those last two rows are the limitation of this approach. YouTube navigates by rewriting the page
-in JavaScript (SPA), and `URLBlocklist` only stops **real page loads**, so it never sees that
-navigation. Google's and Microsoft's own documentation states this limitation. We block the
-internal API the Shorts feed uses to compensate, so videos stop advancing — but it is not
-complete, and **how much leaks through has to be checked on your child's PC.**
+**What to check when picking one**
 
-Blocking it completely requires a force-installed extension, which is outside the scope of
-this feature.
+- Permissions should match the job. Hiding Shorts needs nothing beyond `youtube.com`
+- **Web Store extensions auto-update, and the version cannot be pinned.** A home PC does not meet
+  the prerequisites for off-store force-install (AD domain join / Azure AD / Chrome Enterprise Core)
+- So the child can't remove it but its contents can change. Check `chrome://extensions`
+  occasionally to see whether its permissions have grown
+
 
 #### Bypass routes are closed too
 
-Turning on `URLBlocklist` alone leaves several ways out. The same settings close them.
+Force-installing the extension alone leaves several ways out. The same settings close them.
 
 | Setting | Default | What it closes |
 |---|---|---|
-| `DisableIncognito` | `true` | Incognito mode (`IncognitoModeAvailability=1`) |
+| `DisableIncognito` | `true` | Incognito. **Force-installed extensions don't run there, so this is required** |
 | `DisableGuestMode` | `true` | Guest mode (a separate profile, so policies/extensions are weaker) |
 | `DisableDnsOverHttps` | `true` | Browser DoH — **if left on, it bypasses YouTube/Roblox DNS blocking too** |
 | `BlockExtensionInstalls` | `false` | Installing VPN/proxy extensions (`ExtensionInstallBlocklist=["*"]`) |
@@ -1265,7 +1275,7 @@ silently produce a "thought it was blocked but wasn't" state.
 To use a browser with an assumed path, **verify it first**:
 
 1. Add it to `Browsers` and restart the service
-2. Open the browser's policy page (e.g. `whale://policy`) and check that `URLBlocklist` appears
+2. Open the browser's policy page (e.g. `whale://policy`) and check that `ExtensionInstallForcelist` appears
 3. If it doesn't, find the real path under `HKLM\SOFTWARE\Policies` with `regedit` and set it
    via `RegistryKeyOverrides`
 
@@ -1292,7 +1302,7 @@ Because this touches the registry, it follows exactly the same safety procedure 
    (if the save fails, the registry is left alone — never leave a change you can't undo)
 2. Never re-read the backup for a browser that already has one
    (overwriting the "original" with our own values makes recovery impossible forever)
-3. Keep URLBlocklist entries the parent already had; only add our own
+3. Keep policy entries the parent already had; only add our own
 4. When blocking lifts, remove only our entries; delete keys that didn't exist before
 ```
 
@@ -1360,14 +1370,15 @@ Location: `%ProgramData%\TimeBlocker\timeblocker.config.json`
     "ProcessNames": [ "RobloxPlayerBeta.exe", "RobloxStudioBeta.exe" ]
   },
   "Shorts": {
-    // Shorts only. DNS can't tell paths apart, so this uses browser policy exclusively.
+    // Shorts only. DNS can't tell parts of a site apart, so this uses browser policy exclusively.
     "Mode": "Schedule",                   // block shorts / auto shorts / unblock shorts
     "UseDnsBlocking": false,              // turning this on would block all of youtube.com. Don't
     "UseFirewallBlocking": false,
     "UseBrowserPolicyBlocking": true,
-    "BlockedUrlPatterns": [
-      "youtube.com/shorts",               // subdomains (www / m) are covered too
-      "youtube.com/youtubei/v1/reel/"     // internal API the Shorts feed uses for the next video
+    "ForcedExtensions": [
+      // Shorts-removing extension. The child can't remove it; it is uninstalled when blocking lifts.
+      // Format: "<extension id>;<update url>"
+      "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
     ]
   },
   "BrowserPolicy": {
@@ -1774,11 +1785,13 @@ It uses exactly the same command processor as Telegram, so behavior is identical
   in Chrome / Edge / Firefox, or disable it via Group Policy.
 - **A VPN, proxy, or mobile tethering** can be used to bypass this. That's outside this program's
   scope.
-- **Shorts blocking (`shorts`) is not complete.** The browser policy `URLBlocklist` only stops
-  real page loads. Navigation that only rewrites the URL in JavaScript (SPA) inside YouTube is
-  not caught, so tapping a Shorts thumbnail from the home page can leak through. We also block
-  the internal API the Shorts feed uses to compensate, but it is not 100%, and the Shorts shelf
-  on the home page does not disappear. Complete blocking requires a force-installed extension.
+- **Shorts blocking (`shorts`) depends on a third-party extension.** Web Store extensions
+  auto-update and the version cannot be pinned on a home PC. The child can't remove it, but its
+  contents can change — check `chrome://extensions` occasionally for permission growth.
+- **`URLBlocklist` cannot block Shorts.** That policy only stops real page loads, while YouTube
+  navigates by rewriting the URL inside the page. Typing the address is blocked; tapping a
+  thumbnail from the home page goes straight through. This was confirmed on a real PC during
+  1.3.0 development, and the mechanism was changed to a force-installed extension.
 - **Browser policy applies per browser.** Switching to a browser without the policy defeats both
   Shorts blocking and DoH blocking. Paths other than `chrome` / `edge` are unverified assumptions
   and must be checked directly via a policy page such as `whale://policy`. Firefox is not

@@ -348,7 +348,7 @@ System partially restored. 1 step(s) failed - 위 조치를 확인하세요.
 - 방화벽은 `TimeBlocker_` 로 시작하는 **우리 규칙 이름만** 지웁니다. 사용자의 다른 규칙은 그대로 둡니다.
 - DNS 는 저장된 **원래 값**으로 되돌립니다. 무조건 DHCP 로 바꾸지 않으므로, 수동 DNS 를 쓰던 환경의 설정이 보존됩니다.
 - 브라우저 정책도 저장된 **원래 값**으로만 되돌립니다. 백업이 없으면 레지스트리를 아예
-  건드리지 않습니다. 부모가 직접 넣어둔 `URLBlocklist` 항목은 그대로 보존됩니다.
+  건드리지 않습니다. 부모가 직접 넣어둔 확장이나 정책 항목은 그대로 보존됩니다.
 - 어댑터 DNS 복구나 브라우저 정책 복구가 끝나지 않았으면 상태파일(백업)을 **지우지 않습니다.**
   복구 정보를 잃지 않기 위해서입니다.
 
@@ -447,7 +447,9 @@ Fallback      : NOT ACTIVE
 Upstream DNS  : 1.1.1.1, 8.8.8.8
 
 Browser Policy:
-chrome, edge (시크릿 차단 / 게스트 차단 / DoH 끔)
+Enabled
+  chrome : 강제 설치 확장 1개 / 시크릿 차단 / 게스트 차단 / DoH 끔
+  edge   : 강제 설치 확장 1개 / 시크릿 차단 / 게스트 차단 / DoH 끔
 ```
 
 DNS 프록시가 뜨지 못한 경우에는 이 부분이 이렇게 보입니다.
@@ -684,14 +686,15 @@ policy off         기능 끄기 (바꿔놓은 레지스트리 정책을 원래�
 
 ```
 Browser Policy : ON
-chrome, edge (시크릿 차단 / 게스트 차단 / DoH 끔)
+Enabled
+  chrome : 강제 설치 확장 1개 / 시크릿 차단 / 게스트 차단 / DoH 끔
+  edge   : 강제 설치 확장 1개 / 시크릿 차단 / 게스트 차단 / DoH 끔
 
 쇼츠 차단은 이 기능으로만 동작합니다.
 Shorts 상태    : block (잠금 (항상 막음))
 
-차단 URL:
-  youtube.com/shorts
-  youtube.com/youtubei/v1/reel/
+강제 설치 확장 (아이가 지울 수 없습니다):
+  mgngbgbhliflggkamjnpdmegbkidiapm
 
 함께 막는 우회 경로:
   시크릿 모드  : 차단
@@ -1130,19 +1133,32 @@ Windows 정식 API 만 사용합니다. 프로세스를 숨기거나 보안 기�
 "알림 받기"와 "답장 보내기" 둘뿐입니다. 설정 변경이나 차단 해제는 이 통로에 존재하지 않습니다.
 도배를 막기 위해 답장은 10초 쿨다운과 시간당 20건 제한이 걸려 있습니다.
 
-### 쇼츠만 차단 — 브라우저 정책
+### 쇼츠만 차단 — 확장 강제 설치
 
 **쇼츠는 DNS 로 막을 수 없습니다.** 쇼츠와 일반 영상은 같은 `youtube.com`,
 같은 `googlevideo.com`, 심지어 같은 TLS 연결을 씁니다. DNS 차단은 도메인 단위이므로
 `youtube.com` 을 막으면 유튜브 전체가 막히고, 안 막으면 쇼츠도 열립니다.
-경로(`/shorts/...`)를 구분할 수 있는 수단은 **브라우저 정책** 하나뿐입니다.
+사이트 안의 일부만 막는 수단은 **브라우저 정책** 하나뿐입니다.
 
 그래서 `shorts` 대상만 다른 길로 갑니다.
 
 | 대상 | 차단 수단 |
 |---|---|
 | YouTube / Roblox | DNS(도메인) + 방화벽 + 프로세스 종료 |
-| Shorts | 브라우저 정책 (HKLM 레지스트리의 `URLBlocklist`) |
+| Shorts | 브라우저 정책으로 **쇼츠 제거 확장을 강제 설치** |
+
+강제 설치한 확장은 **아이가 지우거나 끌 수 없습니다.** 차단이 풀리면 목록에서 빠지면서
+크롬이 알아서 제거하므로, 스케줄에도 그대로 맞물립니다.
+
+> **왜 URL 차단이 아니라 확장인가**
+>
+> 처음에는 `URLBlocklist` 정책으로 `/shorts` 경로를 막았습니다. **실제 PC 에서 통하지
+> 않았습니다.** 그 정책은 진짜 페이지 이동만 막는데, 유튜브는 화면 안에서 주소만 바꾸는
+> 방식으로 이동합니다. 주소창에 `youtube.com/shorts` 를 직접 치면 막히지만,
+> 홈에서 쇼츠 썸네일을 누르면 그냥 들어가집니다. 아이가 실제로 쓰는 경로가 바로 그쪽이라
+> 사실상 아무것도 막지 못했습니다.
+>
+> 확장은 페이지 안에서 동작하므로 그 경로까지 막습니다. 그래서 수단을 바꿨습니다.
 
 #### 켜는 방법
 
@@ -1155,8 +1171,6 @@ Windows 정식 API 만 사용합니다. 프로세스를 숨기거나 보안 기�
  쇼츠도 차단할까요? (Y/N, 기본 N):
 ```
 
-`Y` 를 누르면 기능이 켜지고 쇼츠가 상시 차단으로 설정됩니다.
-
 **2) 나중에 텔레그램으로**
 
 ```
@@ -1167,22 +1181,29 @@ shorts 30         30분만 쇼츠 열어주기
 
 policy            지금 상태 보기
 policy on         기능만 켜기
-policy off        기능 끄기 (레지스트리 정책을 원래대로 되돌린다)
+policy off        기능 끄기 (바꿔놓은 레지스트리 정책을 원래대로 되돌린다)
 ```
 
 `block shorts` 와 `auto shorts` 는 **필요한 브라우저 정책을 알아서 함께 켭니다.**
-쇼츠는 그 정책 없이는 전혀 막히지 않으므로, 대상을 직접 지정해 막으라고 한 것을
-동의로 봅니다. 응답에 무엇이 함께 켜졌는지(시크릿 / 게스트 / DoH 차단) 적어줍니다.
+응답에 무엇이 함께 켜졌는지(시크릿 / 게스트 / DoH 차단) 적어줍니다.
 
 > `block all` 은 정책을 켜지 않습니다. PC 전체에 적용되는 변경을 포괄 명령의
-> 부수효과로 일으키지 않기 위한 것입니다. 대신 응답에 쇼츠가 아직 안 막힌다는
-> 사실과 `policy on` 안내가 붙습니다.
+> 부수효과로 일으키지 않기 위한 것입니다. 대신 `status` 와 `targets` 가
+> `BLOCKED*` 로 표시하고 켜는 방법을 알려줍니다.
 
 **확인하는 방법**
 
-`status` 의 `Browser Policy` 줄, `policy` 명령, `doctor` 의 `Browser policy` 항목으로
-실제로 적용됐는지 확인할 수 있습니다. 브라우저에서 `chrome://policy` 를 열어
-`URLBlocklist` 가 들어와 있는지 직접 봐도 됩니다.
+`policy` 가 **레지스트리에 실제로 들어간 것을 읽어서** 보여줍니다.
+
+```
+Browser Policy:
+Enabled
+  chrome : 강제 설치 확장 1개 / 시크릿 차단 / 게스트 차단 / DoH 끔
+  edge   : 정책 없음 (쓰기가 되지 않았거나 아직 적용 전)
+```
+
+`doctor` 의 `Browser policy` 항목에도 같은 내용이 나오고,
+브라우저에서 `chrome://policy` 를 열어 직접 봐도 됩니다.
 
 **설치 후 로컬에서 바꾸려면** (텔레그램을 쓸 수 없을 때)
 
@@ -1191,41 +1212,38 @@ policy off        기능 끄기 (레지스트리 정책을 원래대로 되돌�
 "C:\Program Files\TimeBlocker\TimeBlocker.Service.exe" disable-shorts
 ```
 
-#### 무엇이 막히고 무엇이 안 막히는가
+#### 어떤 확장을 쓰나
 
-기본으로 들어가는 패턴은 두 개입니다.
+기본값은 **Remove YouTube Shorts** 입니다.
 
 ```
-youtube.com/shorts            쇼츠 시청 페이지
-youtube.com/youtubei/v1/reel/ 쇼츠 피드가 다음 영상을 받아오는 내부 API
+mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx
 ```
 
-호스트만 적으면 하위 도메인까지 포함되므로, `youtube.com/shorts` 하나로
-`www.youtube.com/shorts/<id>` 와 `m.youtube.com/shorts/<id>` 가 함께 걸립니다.
+형식은 Chromium 이 정한 `<확장ID>;<업데이트URL>` 이고, 웹스토어 확장이면 업데이트 URL 은
+위 주소를 그대로 씁니다. 바꾸려면 `Shorts.ForcedExtensions` 를 수정하세요.
+확장 ID 는 `chrome://extensions` 에서 **개발자 모드**를 켜면 보입니다.
 
-| 상황 | 결과 |
-|---|---|
-| 주소창에 쇼츠 주소 직접 입력 | 막힘 |
-| 쇼츠 링크를 눌러서 새로 열기 / 새로고침 | 막힘 |
-| 일반 YouTube 영상 (`/watch`) | **그대로 됨** (의도한 동작) |
-| 유튜브 홈에서 쇼츠 썸네일을 눌러서 들어가기 | **페이지 로드가 없으면 안 막힘** |
-| 홈 화면의 쇼츠 섹션 자체 | 그대로 보임 |
+형식이 틀린 항목은 Chromium 이 조용히 무시하므로, 쓰기 전에 걸러내고 로그에 남깁니다.
+(확장 ID 는 `a`~`p` 소문자 32글자입니다)
 
-마지막 두 줄이 이 방식의 한계입니다. 유튜브는 화면 안에서 JS 로 주소만 바꾸는
-방식(SPA)으로 이동하는데, `URLBlocklist` 는 **실제 페이지 로드**를 막는 정책이라
-그 경로를 잡지 못합니다. Google 과 Microsoft 문서가 이 한계를 명시하고 있습니다.
-그래서 쇼츠 피드가 쓰는 내부 API 를 함께 막아 "영상이 넘어가지 않게" 만듭니다.
-완전한 차단은 아니고, 실제로 얼마나 새는지는 **아이 PC 에서 직접 확인해야 합니다.**
+**고를 때 봐야 할 것**
 
-완전히 막으려면 강제 설치 확장이 필요합니다. 그건 이 기능의 범위 밖입니다.
+- 권한이 하는 일에 맞는지. 쇼츠를 가리는 데 `youtube.com` 밖의 권한은 필요 없습니다
+- **웹스토어 확장은 자동으로 업데이트됩니다.** 특정 버전으로 묶을 수 없습니다
+  (가정용 PC 는 스토어 밖 강제 설치의 전제 조건인 AD 도메인 조인 / Azure AD /
+  Chrome Enterprise Core 를 만족하지 못합니다)
+- 아이는 못 지우는데 내용은 바뀔 수 있다는 뜻입니다. 가끔 `chrome://extensions` 에서
+  권한이 늘었는지 봐주세요
+
 
 #### 우회 경로를 함께 막습니다
 
-`URLBlocklist` 만 켜면 빠져나갈 길이 여러 개 남습니다. 같은 설정에서 함께 막습니다.
+확장만 강제 설치하면 빠져나갈 길이 여러 개 남습니다. 같은 설정에서 함께 막습니다.
 
 | 설정 | 기본값 | 막는 것 |
 |---|---|---|
-| `DisableIncognito` | `true` | 시크릿 모드 (`IncognitoModeAvailability=1`) |
+| `DisableIncognito` | `true` | 시크릿 모드. **강제 설치 확장은 시크릿 창에서 동작하지 않으므로 반드시 필요합니다** |
 | `DisableGuestMode` | `true` | 게스트 모드 (별도 프로필이라 확장/정책이 약함) |
 | `DisableDnsOverHttps` | `true` | 브라우저 DoH — **켜져 있으면 YouTube/Roblox DNS 차단까지 우회됩니다** |
 | `BlockExtensionInstalls` | `false` | VPN·프록시 확장 설치 (`ExtensionInstallBlocklist=["*"]`) |
@@ -1255,7 +1273,7 @@ youtube.com/youtubei/v1/reel/ 쇼츠 피드가 다음 영상을 받아오는 내
 웨일처럼 추정 경로인 브라우저를 쓰려면 **먼저 확인하세요.**
 
 1. `Browsers` 에 `"whale"` 을 추가하고 서비스를 재시작
-2. 웨일에서 `whale://policy` 를 열어 `URLBlocklist` 가 보이는지 확인
+2. 웨일에서 `whale://policy` 를 열어 `ExtensionInstallForcelist` 가 보이는지 확인
 3. 안 보이면 `regedit` 에서 `HKLM\SOFTWARE\Policies` 아래를 찾아 실제 경로를 확인하고
    `RegistryKeyOverrides` 로 지정
 
@@ -1282,7 +1300,7 @@ Firefox 는 Chromium 계열이 아니어서 이 방식이 전혀 통하지 않�
    (저장 실패 시 레지스트리를 건드리지 않음 — 되돌릴 수 없는 변경을 남기지 않는다)
 2. 이미 백업이 있는 브라우저는 다시 읽지 않음
    (우리가 쓴 값을 "원본"으로 덮으면 영구히 복구 불가)
-3. 부모가 원래 넣어둔 URLBlocklist 항목은 유지하고 우리 항목만 더함
+3. 부모가 원래 넣어둔 정책 항목은 유지하고 우리 항목만 더함
 4. 차단이 풀리면 우리 항목만 빼고, 원래 없던 키는 키째로 삭제
 ```
 
@@ -1349,14 +1367,15 @@ Firefox 는 Chromium 계열이 아니어서 이 방식이 전혀 통하지 않�
     "ProcessNames": [ "RobloxPlayerBeta.exe", "RobloxStudioBeta.exe" ]
   },
   "Shorts": {
-    // 쇼츠만 차단. DNS 로는 경로를 구분할 수 없으므로 브라우저 정책만 사용한다.
+    // 쇼츠만 차단. DNS 로는 사이트 안의 일부를 구분할 수 없으므로 브라우저 정책만 쓴다.
     "Mode": "Schedule",                   // block shorts / auto shorts / unblock shorts
     "UseDnsBlocking": false,              // 켜면 youtube.com 전체가 막힌다. 켜지 말 것
     "UseFirewallBlocking": false,
     "UseBrowserPolicyBlocking": true,
-    "BlockedUrlPatterns": [
-      "youtube.com/shorts",               // 하위 도메인(www / m)까지 함께 걸린다
-      "youtube.com/youtubei/v1/reel/"     // 쇼츠 피드가 다음 영상을 받아오는 내부 API
+    "ForcedExtensions": [
+      // 쇼츠를 지우는 확장. 아이가 못 지우고, 차단이 풀리면 자동으로 제거된다.
+      // 형식: "<확장ID>;<업데이트URL>"
+      "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
     ]
   },
   "BrowserPolicy": {
@@ -1739,11 +1758,14 @@ Telegram 과 완전히 같은 명령 처리기를 사용하므로 동작이 동�
 - **DoH(DNS over HTTPS) 를 쓰면 DNS 차단이 우회됩니다.** Chrome / Edge / Firefox 의
   "보안 DNS" 기능을 끄거나, 그룹 정책으로 비활성화해야 합니다.
 - **VPN / 프록시 / 모바일 테더링** 으로 우회할 수 있습니다. 이 프로그램의 범위를 벗어납니다.
-- **쇼츠 차단(`shorts`)은 완전하지 않습니다.** 브라우저 정책의 `URLBlocklist` 는 실제 페이지
-  로드만 막습니다. 유튜브 안에서 JS 로 주소만 바꾸는 이동(SPA)은 걸리지 않으므로,
-  홈에서 쇼츠 썸네일을 눌러 들어가는 경로가 새어나갈 수 있습니다.
-  쇼츠 피드가 쓰는 내부 API 를 함께 막아 보완하지만 100% 는 아니고,
-  홈 화면의 쇼츠 섹션도 사라지지 않습니다. 완전한 차단에는 강제 설치 확장이 필요합니다.
+- **쇼츠 차단(`shorts`)은 남이 만든 확장에 의존합니다.** 웹스토어 확장은 자동으로
+  업데이트되고, 가정용 PC 에서는 특정 버전으로 묶을 수 없습니다. 아이는 못 지우는데
+  내용은 바뀔 수 있다는 뜻이므로, 가끔 `chrome://extensions` 에서 권한이 늘었는지
+  확인해야 합니다.
+- **`URLBlocklist` 로는 쇼츠를 막지 못합니다.** 그 정책은 실제 페이지 로드만 막는데
+  유튜브는 화면 안에서 주소만 바꾸는 방식으로 이동합니다. 주소를 직접 입력하면 막히지만
+  홈에서 썸네일을 눌러 들어가는 경로는 그대로 통과합니다. 1.3.0 개발 중 실제 PC 에서
+  확인하고 확장 강제 설치로 바꿨습니다.
 - **브라우저 정책은 브라우저마다 따로 적용됩니다.** 정책을 걸지 않은 브라우저로 옮기면
   쇼츠 차단과 DoH 차단이 모두 무력화됩니다. `chrome` / `edge` 외의 경로는 확인되지 않은
   추정값이므로 `whale://policy` 같은 정책 페이지로 직접 확인해야 합니다.

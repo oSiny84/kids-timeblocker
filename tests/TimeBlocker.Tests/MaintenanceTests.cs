@@ -128,7 +128,7 @@ internal sealed class FakeBrowserPolicyManager : IBrowserPolicyManager
 
     public int RestoreCallCount { get; private set; }
 
-    public bool Apply(TimeBlockerConfig config, IReadOnlyCollection<string> urlPatterns) => false;
+    public bool Apply(TimeBlockerConfig config, IReadOnlyCollection<string> forcedExtensions) => false;
 
     public bool Restore()
     {

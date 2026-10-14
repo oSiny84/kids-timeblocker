@@ -493,7 +493,7 @@ public sealed class DoctorService : IDiagnosticsService
     /// 잡아내지 못하면 "막았는데 쇼츠가 그대로 되네" 가 된다.
     /// 서비스 내부 상태를 보지 않고 레지스트리를 직접 읽는다.
     ///
-    /// URLBlocklist 는 차단 시간대에만 들어가므로 "있어야 한다" 고 단정할 수 없다.
+    /// 강제 설치 목록은 차단 시간대에만 들어가므로 "있어야 한다" 고 단정할 수 없다.
     /// 대신 기능이 켜진 동안 항상 들어가 있어야 하는 우회 봉쇄 항목(시크릿 / DoH 등)으로
     /// 쓰기가 실제로 먹었는지 판단한다. 권한 부족이나 잘못된 키 경로가 여기서 드러난다.
     /// </summary>
@@ -558,7 +558,8 @@ public sealed class DoctorService : IDiagnosticsService
                     .Select(e => e.Name)
                     .ToList();
 
-                var urlCount = (_registry.ReadList($@"{key}\{PolicyNames.UrlBlocklist}") ?? Array.Empty<string>()).Count;
+                var forcedCount =
+                    (_registry.ReadList($@"{key}\{PolicyNames.ExtensionInstallForcelist}") ?? Array.Empty<string>()).Count;
 
                 if (missing.Count > 0)
                 {
@@ -566,7 +567,7 @@ public sealed class DoctorService : IDiagnosticsService
                     continue;
                 }
 
-                details.Add($"{browserId} URL {urlCount}개");
+                details.Add($"{browserId} 확장 {forcedCount}개");
             }
             catch (Exception ex)
             {

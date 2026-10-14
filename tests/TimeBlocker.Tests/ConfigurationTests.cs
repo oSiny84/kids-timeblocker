@@ -125,8 +125,8 @@ public class ConfigurationTests : IDisposable
         Assert.False(config.BrowserPolicy.Enabled);
         Assert.Equal(BlockMode.Schedule, config.Shorts.Mode);
 
-        // 패턴 자체는 미리 채워져 있어야 한다. 기능만 켜면 바로 쓸 수 있어야 하기 때문이다.
-        Assert.Contains("youtube.com/shorts", config.Shorts.BlockedUrlPatterns);
+        // 쓸 확장은 미리 채워져 있어야 한다. 기능만 켜면 바로 쓸 수 있어야 하기 때문이다.
+        Assert.NotEmpty(config.Shorts.ForcedExtensions);
     }
 
     [Fact]
@@ -144,13 +144,19 @@ public class ConfigurationTests : IDisposable
     }
 
     [Fact]
-    public void Shorts_PatternsAlwaysIncludeAPath()
+    public void Shorts_ForcedExtensionsAreWellFormed()
     {
-        // 경로 없이 호스트만 적으면 유튜브 전체가 막힌다. 기본값에 그런 패턴이 있으면 안 된다.
+        // 형식이 틀리면 Chromium 이 조용히 무시한다. "막았는데 쇼츠가 되네" 로 돌아온다.
+        // "<a~p 소문자 32글자>" 또는 "<ID>;<업데이트URL>" 이어야 한다.
         var config = TimeBlockerConfig.CreateDefault();
         config.Normalize();
 
-        Assert.All(config.Shorts.BlockedUrlPatterns, pattern => Assert.Contains("/", pattern));
+        Assert.All(config.Shorts.ForcedExtensions, entry =>
+        {
+            var id = entry.Split(';', 2)[0];
+            Assert.Equal(32, id.Length);
+            Assert.All(id, c => Assert.InRange(c, 'a', 'p'));
+        });
     }
 
     [Fact]
@@ -162,7 +168,7 @@ public class ConfigurationTests : IDisposable
 
         Assert.NotNull(store.Current.Shorts);
         Assert.NotNull(store.Current.BrowserPolicy);
-        Assert.NotEmpty(store.Current.Shorts.BlockedUrlPatterns);
+        Assert.NotEmpty(store.Current.Shorts.ForcedExtensions);
     }
 
     [Fact]

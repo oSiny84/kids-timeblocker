@@ -184,9 +184,10 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
             }
         }
 
-        // 1-1. 브라우저 정책(URLBlocklist)으로 막아야 할 URL 패턴 모으기
-        //      DNS 는 도메인 단위라 경로(/shorts)를 구분할 수 없다. 그 역할을 여기서 맡는다.
-        var urlPatternsToBlock = new List<string>();
+        // 1-1. 브라우저 정책으로 강제 설치할 확장 모으기
+        //      DNS 는 도메인 단위라 사이트 안의 일부(쇼츠)만 막을 수 없다. 그 역할을 여기서 맡는다.
+        //      목록에서 빠지면 크롬이 알아서 제거하므로, 차단이 풀리면 확장도 사라진다.
+        var extensionsToForce = new List<string>();
         foreach (var decision in decisions)
         {
             if (!decision.IsBlocked) continue;
@@ -194,7 +195,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
             var settings = config.GetTarget(decision.Target);
             if (!settings.UseBrowserPolicyBlocking) continue;
 
-            urlPatternsToBlock.AddRange(settings.BlockedUrlPatterns);
+            extensionsToForce.AddRange(settings.ForcedExtensions);
         }
 
         // 2. 방화벽으로 막아야 할 실행파일 모으기
@@ -249,14 +250,14 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         //      다음 주기에 스스로 다시 채워 넣어야 한다. (내용이 같으면 쓰지 않으므로 비용은 거의 없다)
         try
         {
-            _browserPolicy.Apply(config, urlPatternsToBlock);
+            _browserPolicy.Apply(config, extensionsToForce);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "브라우저 정책 적용 중 오류가 발생했습니다. 다음 주기에 다시 시도합니다.");
         }
 
-        var signature = BuildSignature(config, domainsToBlock, executablesToBlock, urlPatternsToBlock);
+        var signature = BuildSignature(config, domainsToBlock, executablesToBlock, extensionsToForce);
         if (signature == _appliedSignature && !_hostsFallbackActive)
         {
             return; // 변경 없음 - 시스템을 건드리지 않는다
@@ -812,7 +813,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         TimeBlockerConfig config,
         SortedSet<string> domains,
         Dictionary<string, List<string>> executables,
-        IReadOnlyCollection<string> urlPatterns)
+        IReadOnlyCollection<string> forcedExtensions)
     {
         var parts = new List<string>
         {
@@ -822,7 +823,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
 
             // 브라우저 정책은 매 주기 직접 적용하므로 여기서는 상태 설명을 갱신하는 용도로만 쓴다.
             $"browserPolicy={config.BrowserPolicy.Enabled}",
-            "urls=" + string.Join(',', urlPatterns.OrderBy(p => p, StringComparer.Ordinal))
+            "extensions=" + string.Join(',', forcedExtensions.OrderBy(e => e, StringComparer.Ordinal))
         };
 
         foreach (var (rule, paths) in executables.OrderBy(kv => kv.Key, StringComparer.Ordinal))

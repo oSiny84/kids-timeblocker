@@ -528,11 +528,15 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         builder.AppendLine("쇼츠 차단은 이 기능으로만 동작합니다.");
         builder.AppendLine($"Shorts 상태    : {config.Shorts.Mode.ToCommandName()} ({config.Shorts.Mode.ToDisplayName()})");
 
-        if (config.Shorts.BlockedUrlPatterns.Count > 0)
+        if (config.Shorts.ForcedExtensions.Count > 0)
         {
             builder.AppendLine();
-            builder.AppendLine("차단 URL:");
-            foreach (var pattern in config.Shorts.BlockedUrlPatterns) builder.AppendLine($"  {pattern}");
+            builder.AppendLine("강제 설치 확장 (아이가 지울 수 없습니다):");
+            foreach (var entry in config.Shorts.ForcedExtensions)
+            {
+                // "<ID>;<업데이트URL>" 에서 ID 만 보여준다. URL 까지 적으면 줄이 길어진다.
+                builder.AppendLine($"  {entry.Split(';', 2)[0]}");
+            }
         }
 
         builder.AppendLine();
@@ -601,7 +605,7 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         var builder = new StringBuilder();
 
         builder.AppendLine("이 PC 의 브라우저에 아래가 함께 적용됩니다.");
-        builder.AppendLine("  - 쇼츠 경로 차단 (일반 YouTube 영상은 그대로)");
+        builder.AppendLine("  - 쇼츠를 지우는 확장 강제 설치 (아이가 지울 수 없음)");
         if (policy.DisableIncognito) builder.AppendLine("  - 시크릿 모드 사용 불가");
         if (policy.DisableGuestMode) builder.AppendLine("  - 게스트 모드 사용 불가");
         if (policy.DisableDnsOverHttps) builder.AppendLine("  - 브라우저 DoH 끔 (DNS 차단 우회 방지)");

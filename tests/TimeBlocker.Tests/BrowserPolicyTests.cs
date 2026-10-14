@@ -19,7 +19,17 @@ namespace TimeBlocker.Tests;
 public class BrowserPolicyTests
 {
     private const string ChromeKey = @"SOFTWARE\Policies\Google\Chrome";
+
+    private static string ChromeForced => $@"{ChromeKey}\{PolicyNames.ExtensionInstallForcelist}";
     private static string ChromeUrls => $@"{ChromeKey}\{PolicyNames.UrlBlocklist}";
+
+    /// <summary>쇼츠를 지우는 확장. 형식은 "&lt;ID&gt;;&lt;업데이트URL&gt;" 이다.</summary>
+    private const string ShortsExtension =
+        "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx";
+
+    /// <summary>부모가 원래 넣어둔 다른 확장. 우리가 건드리면 안 되는 항목이다.</summary>
+    private const string OtherExtension =
+        "abcdefghijklmnopabcdefghijklmnop;https://clients2.google.com/service/update2/crx";
 
     // ================================================================= 적용
 
@@ -28,10 +38,10 @@ public class BrowserPolicyTests
     {
         var (manager, registry, _) = Create();
 
-        var changed = manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        var changed = manager.Apply(Config(), new[] { ShortsExtension });
 
         Assert.True(changed);
-        Assert.Equal(new[] { "youtube.com/shorts" }, registry.ReadList(ChromeUrls));
+        Assert.Equal(new[] { ShortsExtension }, registry.ReadList(ChromeForced));
     }
 
     [Fact]
@@ -40,13 +50,13 @@ public class BrowserPolicyTests
         var (manager, registry, _) = Create();
 
         // 부모가 이미 손으로 넣어둔 항목이 있는 상황.
-        registry.WriteList(ChromeUrls, new[] { "example.com/bad" });
+        registry.WriteList(ChromeForced, new[] { OtherExtension });
 
-        manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        manager.Apply(Config(), new[] { ShortsExtension });
 
         Assert.Equal(
-            new[] { "example.com/bad", "youtube.com/shorts" },
-            registry.ReadList(ChromeUrls));
+            new[] { OtherExtension, ShortsExtension },
+            registry.ReadList(ChromeForced));
     }
 
     [Fact]
@@ -55,10 +65,10 @@ public class BrowserPolicyTests
         var (manager, registry, _) = Create();
         var config = Config();
 
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
         var writesAfterFirst = registry.WriteCount;
 
-        var changed = manager.Apply(config, new[] { "youtube.com/shorts" });
+        var changed = manager.Apply(config, new[] { ShortsExtension });
 
         Assert.False(changed);
         Assert.Equal(writesAfterFirst, registry.WriteCount);
@@ -69,7 +79,7 @@ public class BrowserPolicyTests
     {
         var (manager, registry, _) = Create();
 
-        manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        manager.Apply(Config(), new[] { ShortsExtension });
 
         Assert.Equal(
             PolicyValue.Dword(1),
@@ -92,7 +102,7 @@ public class BrowserPolicyTests
         // 차단 시간 직전에 시크릿 창을 미리 열어두는 우회를 막기 위한 것이다.
         manager.Apply(config, Array.Empty<string>());
 
-        Assert.Null(registry.ReadList(ChromeUrls));
+        Assert.Null(registry.ReadList(ChromeForced));
         Assert.Equal(
             PolicyValue.Dword(1),
             registry.ReadValue(ChromeKey, PolicyNames.IncognitoModeAvailability));
@@ -104,24 +114,58 @@ public class BrowserPolicyTests
         var (manager, registry, _) = Create();
         var config = Config();
 
-        registry.WriteList(ChromeUrls, new[] { "example.com/bad" });
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        registry.WriteList(ChromeForced, new[] { OtherExtension });
+        manager.Apply(config, new[] { ShortsExtension });
 
         // 허용으로 바뀌면 우리 항목만 빠지고 부모가 넣은 항목은 남아야 한다.
         manager.Apply(config, Array.Empty<string>());
 
-        Assert.Equal(new[] { "example.com/bad" }, registry.ReadList(ChromeUrls));
+        Assert.Equal(new[] { OtherExtension }, registry.ReadList(ChromeForced));
     }
 
-    [Fact]
-    public void Apply_SkipsPatternWithWhitespace()
+    [Theory]
+    [InlineData("bad extension id")]                  // 공백 - Chromium 이 통째로 무시한다
+    [InlineData("tooshort")]                          // 32글자가 아니다
+    [InlineData("MGNGBGBHLIFLGGKAMJNPDMEGBKIDIAPM")]  // 대문자는 확장 ID 가 아니다
+    [InlineData("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")]  // a~p 범위를 벗어난다
+    public void Apply_SkipsMalformedExtensionEntry(string malformed)
     {
         var (manager, registry, _) = Create();
 
-        // 공백이 들어간 항목은 Chromium 이 통째로 무시하므로 아예 쓰지 않는다.
-        manager.Apply(Config(), new[] { "youtube.com/shorts", "bad pattern/x" });
+        // 형식이 틀리면 Chromium 이 조용히 무시한다. 그러면 "막았는데 쇼츠가 되네" 로
+        // 돌아오므로, 쓰기 전에 걸러낸다.
+        manager.Apply(Config(), new[] { ShortsExtension, malformed });
 
-        Assert.Equal(new[] { "youtube.com/shorts" }, registry.ReadList(ChromeUrls));
+        Assert.Equal(new[] { ShortsExtension }, registry.ReadList(ChromeForced));
+    }
+
+    [Fact]
+    public void Apply_RemovesUrlBlocklistLeftByOlderVersion()
+    {
+        // 1.3.0-rc.1 은 URLBlocklist 로 /shorts 를 막으려 했다. 실제 PC 에서 통하지 않아
+        // 확장 강제 설치로 바꿨다. 올라온 설치에 남아 있는 그 항목을 걷어내야 한다.
+        var (manager, registry, _) = Create();
+
+        registry.WriteList(ChromeUrls, new[] { "youtube.com/shorts" });
+
+        manager.Apply(Config(), new[] { ShortsExtension });
+
+        Assert.Null(registry.ReadList(ChromeUrls));
+        Assert.Equal(new[] { ShortsExtension }, registry.ReadList(ChromeForced));
+    }
+
+    [Fact]
+    public void Apply_KeepsUrlBlocklistEntriesTheParentAdded()
+    {
+        // 우리가 넣은 적 없는 항목까지 지우면 남의 설정을 날리는 것이다.
+        // 백업을 뜬 뒤에 들어온 항목은 원본으로 간주되어 그대로 남는다.
+        var (manager, registry, _) = Create();
+
+        registry.WriteList(ChromeUrls, new[] { "example.com/bad" });
+
+        manager.Apply(Config(), new[] { ShortsExtension });
+
+        Assert.Equal(new[] { "example.com/bad" }, registry.ReadList(ChromeUrls));
     }
 
     [Fact]
@@ -132,7 +176,7 @@ public class BrowserPolicyTests
         var config = Config();
         config.BrowserPolicy.Browsers = new List<string> { "madeupbrowser" };
 
-        var changed = manager.Apply(config, new[] { "youtube.com/shorts" });
+        var changed = manager.Apply(config, new[] { ShortsExtension });
 
         Assert.False(changed);
         Assert.Equal(0, registry.WriteCount);
@@ -151,12 +195,12 @@ public class BrowserPolicyTests
             ["whale"] = @"HKLM\SOFTWARE\Policies\Naver\Whale"
         };
 
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
         // HKLM 접두사는 떼고 쓴다.
         Assert.Equal(
-            new[] { "youtube.com/shorts" },
-            registry.ReadList($@"SOFTWARE\Policies\Naver\Whale\{PolicyNames.UrlBlocklist}"));
+            new[] { ShortsExtension },
+            registry.ReadList($@"SOFTWARE\Policies\Naver\Whale\{PolicyNames.ExtensionInstallForcelist}"));
     }
 
     [Fact]
@@ -168,7 +212,7 @@ public class BrowserPolicyTests
         config.BrowserPolicy.BlockExtensionInstalls = true;
         config.BrowserPolicy.ExtensionAllowlist = new List<string> { "abcdefghijklmnop" };
 
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
         Assert.Equal(
             new[] { "*" },
@@ -183,7 +227,7 @@ public class BrowserPolicyTests
     {
         var (manager, registry, _) = Create();
 
-        manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        manager.Apply(Config(), new[] { ShortsExtension });
 
         Assert.Null(registry.ReadList($@"{ChromeKey}\{PolicyNames.ExtensionInstallBlocklist}"));
         Assert.Null(registry.ReadList($@"{ChromeKey}\{PolicyNames.ExtensionInstallAllowlist}"));
@@ -198,7 +242,7 @@ public class BrowserPolicyTests
 
         Assert.False(store.Exists);
 
-        manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        manager.Apply(Config(), new[] { ShortsExtension });
 
         Assert.True(store.Exists);
         Assert.NotNull(store.Load()!.Find("chrome"));
@@ -210,14 +254,14 @@ public class BrowserPolicyTests
         var (manager, _, store) = Create();
         var config = Config();
 
-        manager.Apply(config, new[] { "youtube.com/shorts" });
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
+        manager.Apply(config, new[] { ShortsExtension });
 
         // 두 번째 적용에서 다시 백업을 뜨면 우리가 쓴 값이 "원본"으로 기록되어
         // 영구히 되돌릴 수 없게 된다. 원본은 처음 그대로여야 한다.
         var backup = store.Load()!.Find("chrome")!;
 
-        Assert.False(backup.FindList(PolicyNames.UrlBlocklist)!.Existed);
+        Assert.False(backup.FindList(PolicyNames.ExtensionInstallForcelist)!.Existed);
         Assert.False(backup.FindValue(PolicyNames.IncognitoModeAvailability)!.Existed);
     }
 
@@ -227,10 +271,10 @@ public class BrowserPolicyTests
         var (manager, _, store) = Create();
         var config = Config();
 
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
         config.BrowserPolicy.Browsers = new List<string> { "chrome", "edge" };
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
         var snapshot = store.Load()!;
         Assert.NotNull(snapshot.Find("chrome"));
@@ -244,12 +288,12 @@ public class BrowserPolicyTests
         var store = new ThrowingStateStore();
         var manager = new BrowserPolicyManager(registry, store, NullLogger<BrowserPolicyManager>.Instance);
 
-        var changed = manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        var changed = manager.Apply(Config(), new[] { ShortsExtension });
 
         // 되돌릴 근거를 저장하지 못했으면 레지스트리를 건드려서는 안 된다.
         Assert.False(changed);
         Assert.Equal(0, registry.WriteCount);
-        Assert.Null(registry.ReadList(ChromeUrls));
+        Assert.Null(registry.ReadList(ChromeForced));
     }
 
     // ================================================================= 복구
@@ -260,13 +304,13 @@ public class BrowserPolicyTests
         var (manager, registry, store) = Create();
 
         // 설치 전 상태: 부모가 넣어둔 차단 목록 + 시크릿 정책이 이미 있었다.
-        registry.WriteList(ChromeUrls, new[] { "example.com/bad" });
+        registry.WriteList(ChromeForced, new[] { OtherExtension });
         registry.WriteValue(ChromeKey, PolicyNames.IncognitoModeAvailability, PolicyValue.Dword(0));
 
-        manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        manager.Apply(Config(), new[] { ShortsExtension });
         manager.Restore();
 
-        Assert.Equal(new[] { "example.com/bad" }, registry.ReadList(ChromeUrls));
+        Assert.Equal(new[] { OtherExtension }, registry.ReadList(ChromeForced));
         Assert.Equal(
             PolicyValue.Dword(0),
             registry.ReadValue(ChromeKey, PolicyNames.IncognitoModeAvailability));
@@ -278,10 +322,10 @@ public class BrowserPolicyTests
     {
         var (manager, registry, store) = Create();
 
-        manager.Apply(Config(), new[] { "youtube.com/shorts" });
+        manager.Apply(Config(), new[] { ShortsExtension });
         manager.Restore();
 
-        Assert.Null(registry.ReadList(ChromeUrls));
+        Assert.Null(registry.ReadList(ChromeForced));
         Assert.Null(registry.ReadValue(ChromeKey, PolicyNames.IncognitoModeAvailability));
         Assert.Null(registry.ReadValue(ChromeKey, PolicyNames.DnsOverHttpsMode));
         Assert.False(store.Exists);
@@ -292,7 +336,7 @@ public class BrowserPolicyTests
     {
         var (manager, registry, _) = Create();
 
-        registry.WriteList(ChromeUrls, new[] { "example.com/bad" });
+        registry.WriteList(ChromeForced, new[] { OtherExtension });
         var writes = registry.WriteCount;
 
         var changed = manager.Restore();
@@ -300,7 +344,7 @@ public class BrowserPolicyTests
         // 백업이 없으면 우리가 넣은 것이 없다는 뜻이다. 추측으로 지우면 남의 설정을 날린다.
         Assert.False(changed);
         Assert.Equal(writes, registry.WriteCount);
-        Assert.Equal(new[] { "example.com/bad" }, registry.ReadList(ChromeUrls));
+        Assert.Equal(new[] { OtherExtension }, registry.ReadList(ChromeForced));
     }
 
     [Fact]
@@ -309,13 +353,13 @@ public class BrowserPolicyTests
         var (manager, registry, store) = Create();
         var config = Config();
 
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
         // 기능을 끄면 다음 적용 주기에 스스로 원래대로 돌아가야 한다.
         config.BrowserPolicy.Enabled = false;
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
-        Assert.Null(registry.ReadList(ChromeUrls));
+        Assert.Null(registry.ReadList(ChromeForced));
         Assert.False(store.Exists);
     }
 
@@ -325,18 +369,18 @@ public class BrowserPolicyTests
         var (manager, registry, store) = Create();
         var config = Config();
 
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
         config.BrowserPolicy.Enabled = false;
         manager.Apply(config, Array.Empty<string>());
 
         config.BrowserPolicy.Enabled = true;
-        manager.Apply(config, new[] { "youtube.com/shorts" });
+        manager.Apply(config, new[] { ShortsExtension });
 
-        Assert.Equal(new[] { "youtube.com/shorts" }, registry.ReadList(ChromeUrls));
+        Assert.Equal(new[] { ShortsExtension }, registry.ReadList(ChromeForced));
 
         // 다시 켠 뒤에도 "원래는 없었다" 가 유지되어야 완전한 복구가 가능하다.
-        Assert.False(store.Load()!.Find("chrome")!.FindList(PolicyNames.UrlBlocklist)!.Existed);
+        Assert.False(store.Load()!.Find("chrome")!.FindList(PolicyNames.ExtensionInstallForcelist)!.Existed);
     }
 
     // ================================================================= 경로 해석
@@ -396,12 +440,12 @@ public class BrowserPolicyTests
         var (manager, _, _) = Create();
         var config = Config();
 
-        manager.Apply(config, new[] { "youtube.com/shorts", "youtube.com/youtubei/v1/reel/" });
+        manager.Apply(config, new[] { ShortsExtension, OtherExtension });
 
         var text = manager.Describe(config);
 
         Assert.Contains("chrome", text);
-        Assert.Contains("차단 URL 2개", text);
+        Assert.Contains("강제 설치 확장 2개", text);
         Assert.Contains("시크릿 차단", text);
     }
 
@@ -431,7 +475,7 @@ public class BrowserPolicyTests
 
         var text = manager.Describe(config);
 
-        Assert.Contains("차단 URL 없음", text);
+        Assert.Contains("강제 설치 확장 없음", text);
         Assert.Contains("시크릿 차단", text);
     }
 

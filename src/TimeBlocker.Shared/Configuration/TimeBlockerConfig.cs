@@ -110,23 +110,26 @@ public sealed class TargetSettings
     public List<string> ExtraExecutablePaths { get; set; } = new();
 
     /// <summary>
-    /// 브라우저 정책(URLBlocklist)으로 막을지.
+    /// 브라우저 정책으로 막을지.
     ///
     /// DNS 차단은 도메인 단위라 경로(/shorts)를 구분할 수 없다.
-    /// "유튜브는 되고 쇼츠만 막기" 처럼 경로 단위 차단이 필요한 대상에 쓴다.
+    /// "유튜브는 되고 쇼츠만 막기" 처럼 사이트 안의 일부만 막아야 하는 대상에 쓴다.
     /// </summary>
     public bool UseBrowserPolicyBlocking { get; set; }
 
     /// <summary>
-    /// 차단할 URL 패턴. Chromium URLBlocklist 필터 형식을 그대로 쓴다.
+    /// 강제 설치할 확장. 아이가 지울 수 없고, 차단이 풀리면 자동으로 제거된다.
     ///
-    /// 호스트만 적으면 하위 도메인까지 포함되고, 경로는 접두사로 비교된다.
-    /// 즉 youtube.com/shorts 하나로 www / m 하위 도메인의 /shorts/&lt;id&gt; 까지 걸린다.
-    /// 끝에 와일드카드(*)는 쓸 수 없고 경로는 대소문자를 구분한다.
+    /// 형식은 Chromium ExtensionInstallForcelist 가 정한 그대로다.
+    ///   &lt;확장ID&gt;;&lt;업데이트URL&gt;
+    /// 웹스토어 확장이면 업데이트 URL 은 https://clients2.google.com/service/update2/crx 다.
     ///
-    /// 주의: 경로 없이 호스트만 적으면 그 사이트 전체가 막힌다.
+    /// 처음에는 URLBlocklist 로 /shorts 경로를 막으려 했으나 실제 PC 에서 통하지 않았다.
+    /// 그 정책은 진짜 페이지 이동만 막는데, 유튜브는 화면 안에서 주소만 바꾸는 방식으로
+    /// 이동하므로 홈에서 쇼츠로 들어가는 경로를 잡지 못한다. 확장은 페이지 안에서
+    /// 동작하므로 그 경로까지 막는다.
     /// </summary>
-    public List<string> BlockedUrlPatterns { get; set; } = new();
+    public List<string> ForcedExtensions { get; set; } = new();
 
     /// <summary>
     /// Shorts 대상의 기본값.
@@ -147,14 +150,11 @@ public sealed class TargetSettings
         UseFirewallBlocking = false,
         TerminateProcesses = false,
         UseBrowserPolicyBlocking = true,
-        BlockedUrlPatterns = new List<string>
+        ForcedExtensions = new List<string>
         {
-            // 쇼츠 시청 페이지. 호스트만 적었으므로 www / m 하위 도메인도 함께 걸린다.
-            "youtube.com/shorts",
-
-            // 쇼츠 피드가 다음 영상을 받아오는 내부 API.
-            // 이걸 막으면 페이지 이동 없이 넘기는 경로(SPA)도 영상을 받지 못한다.
-            "youtube.com/youtubei/v1/reel/"
+            // Remove YouTube Shorts (권한: *://*.youtube.com/* 만)
+            // 실제 PC 에서 쇼츠가 사라지는 것을 확인하고 고른 확장이다.
+            "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
         }
     };
 }
@@ -401,10 +401,10 @@ public sealed class TimeBlockerConfig
         Shorts.Domains ??= new List<string>();
         Shorts.ProcessNames ??= new List<string>();
         Shorts.ExtraExecutablePaths ??= new List<string>();
-        Shorts.BlockedUrlPatterns ??= new List<string>();
+        Shorts.ForcedExtensions ??= new List<string>();
 
-        YouTube.BlockedUrlPatterns ??= new List<string>();
-        Roblox.BlockedUrlPatterns ??= new List<string>();
+        YouTube.ForcedExtensions ??= new List<string>();
+        Roblox.ForcedExtensions ??= new List<string>();
 
         // 1.1 이하에서 올라온 설정파일의 Enabled 를 Mode 로 옮긴다.
         YouTube.MigrateLegacyMode();

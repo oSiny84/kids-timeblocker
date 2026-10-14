@@ -383,7 +383,7 @@ public class RemoteCommandParserTests
         var command = _sut.Parse(input);
 
         Assert.Equal(RemoteCommandType.Unknown, command.Type);
-        Assert.Contains("BlockedUrlPatterns", command.Error);
+        Assert.Contains("ForcedExtensions", command.Error);
     }
 
     [Fact]

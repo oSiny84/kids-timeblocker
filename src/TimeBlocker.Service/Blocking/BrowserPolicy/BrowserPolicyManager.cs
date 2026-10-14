@@ -8,10 +8,10 @@ public interface IBrowserPolicyManager
 {
     /// <summary>
     /// 정책을 지금 상태에 맞춰 적용한다.
-    /// urlPatterns 가 비어 있으면 URL 차단 목록만 걷어내고, 우회 봉쇄 항목은 그대로 둔다.
+    /// forcedExtensions 가 비어 있으면 강제 설치 목록만 걷어내고, 우회 봉쇄 항목은 그대로 둔다.
     /// </summary>
     /// <returns>실제로 레지스트리를 건드렸으면 true.</returns>
-    bool Apply(TimeBlockerConfig config, IReadOnlyCollection<string> urlPatterns);
+    bool Apply(TimeBlockerConfig config, IReadOnlyCollection<string> forcedExtensions);
 
     /// <summary>저장된 백업으로 모든 정책을 원래대로 되돌린다. (cleanup / 기능 끄기)</summary>
     bool Restore();
@@ -28,13 +28,21 @@ public interface IBrowserPolicyManager
 ///
 /// 왜 필요한가:
 ///   DNS 차단은 도메인 단위다. 쇼츠와 일반 영상은 같은 youtube.com / googlevideo.com 을
-///   쓰므로 DNS 로는 구분할 수 없다. 경로(/shorts)를 보는 수단은 브라우저 정책뿐이다.
+///   쓰므로 DNS 로는 구분할 수 없다. 사이트 안의 일부만 막는 수단은 브라우저 정책뿐이다.
+///
+/// 어떻게 막는가:
+///   쇼츠를 지우는 확장을 강제 설치한다. 아이는 지우거나 끌 수 없고,
+///   차단이 풀리면 목록에서 빠지면서 크롬이 알아서 제거한다.
+///
+///   처음에는 URLBlocklist 로 /shorts 경로를 막으려 했으나 실제 PC 에서 통하지 않았다.
+///   그 정책은 진짜 페이지 이동만 막는데, 유튜브는 화면 안에서 주소만 바꾸는 방식으로
+///   이동하므로 홈에서 쇼츠로 들어가는 경로를 잡지 못한다. 확장은 페이지 안에서
+///   동작하므로 그 경로까지 막는다.
 ///
 /// 한계 (README 14장에도 적어 둔다):
-///   - 실제 페이지 로드만 막는다. 유튜브 안에서 JS 로 주소만 바꾸는 이동(SPA)은 걸리지 않는다.
-///     그래서 쇼츠 피드가 쓰는 내부 API 경로도 함께 막는다.
-///   - 홈 화면의 쇼츠 섹션은 그대로 보인다.
 ///   - 정책이 적용되지 않는 브라우저로 옮기면 효과가 없다.
+///   - 웹스토어 확장은 자동으로 업데이트된다. 특정 버전으로 묶을 수 없다.
+///     (가정용 PC 는 스토어 밖 강제 설치의 전제 조건을 만족하지 못한다)
 ///
 /// 안전 원칙 (어댑터 DNS 와 동일):
 ///   - 레지스트리를 건드리기 전에 반드시 원본을 파일로 저장한다. 저장 실패 시 쓰지 않는다.
@@ -78,7 +86,7 @@ public sealed class BrowserPolicyManager : IBrowserPolicyManager
 
     public bool HasSavedOriginal => _store.Exists;
 
-    public bool Apply(TimeBlockerConfig config, IReadOnlyCollection<string> urlPatterns)
+    public bool Apply(TimeBlockerConfig config, IReadOnlyCollection<string> forcedExtensions)
     {
         lock (_lock)
         {
@@ -100,7 +108,7 @@ public sealed class BrowserPolicyManager : IBrowserPolicyManager
                 return false;
             }
 
-            var patterns = SanitizePatterns(urlPatterns);
+            var extensions = SanitizeExtensions(forcedExtensions);
 
             try
             {
@@ -112,7 +120,7 @@ public sealed class BrowserPolicyManager : IBrowserPolicyManager
                     var backup = snapshot.Find(browserId);
                     if (backup is null) continue; // EnsureBackup 이 보장하지만 방어적으로 둔다.
 
-                    changed |= ApplyToBrowser(config.BrowserPolicy, browserId, registryKey, backup, patterns);
+                    changed |= ApplyToBrowser(config.BrowserPolicy, browserId, registryKey, backup, extensions);
                 }
 
                 return changed;
@@ -142,14 +150,22 @@ public sealed class BrowserPolicyManager : IBrowserPolicyManager
         string browserId,
         string registryKey,
         BrowserPolicyBackup backup,
-        IReadOnlyList<string> patterns)
+        IReadOnlyList<string> forcedExtensions)
     {
         var changed = false;
 
-        // 1. URL 차단 목록. 사용자가 원래 가지고 있던 항목은 유지하고 우리 패턴만 더한다.
-        var originalUrls = backup.FindList(PolicyNames.UrlBlocklist);
+        // 1. 강제 설치할 확장. 사용자가 원래 가지고 있던 항목은 유지하고 우리 것만 더한다.
+        //    목록에서 빠지면 크롬이 그 확장을 제거하므로, 차단이 풀리면 저절로 사라진다.
         changed |= WriteMergedList(
-            registryKey, PolicyNames.UrlBlocklist, originalUrls, patterns, browserId);
+            registryKey, PolicyNames.ExtensionInstallForcelist,
+            backup.FindList(PolicyNames.ExtensionInstallForcelist), forcedExtensions, browserId);
+
+        // 1-1. URLBlocklist 에는 더 이상 아무것도 쓰지 않는다. (실제 PC 에서 통하지 않았다)
+        //      빈 목록으로 맞춰서, 이전 버전이 써넣은 항목이 있으면 걷어낸다.
+        //      사용자가 원래 가지고 있던 항목은 그대로 복구된다.
+        changed |= WriteMergedList(
+            registryKey, PolicyNames.UrlBlocklist,
+            backup.FindList(PolicyNames.UrlBlocklist), Array.Empty<string>(), browserId);
 
         // 2. 우회 봉쇄 항목.
         //    차단 시간이 아니어도 계속 적용한다. 시크릿 모드를 차단 시간에만 막으면
@@ -432,38 +448,46 @@ public sealed class BrowserPolicyManager : IBrowserPolicyManager
     }
 
     /// <summary>
-    /// URL 패턴을 다듬는다. 공백/중복을 걷어내고, 사이트 전체를 막아버릴 패턴에는 경고를 남긴다.
+    /// 강제 설치할 확장 항목을 다듬는다.
+    ///
+    /// 형식이 틀린 항목은 Chromium 이 조용히 무시한다. 그러면 "막았는데 쇼츠가 되네" 로
+    /// 돌아오므로, 여기서 걸러내고 이유를 로그에 남긴다.
     /// </summary>
-    private List<string> SanitizePatterns(IReadOnlyCollection<string> patterns)
+    private List<string> SanitizeExtensions(IReadOnlyCollection<string> entries)
     {
         var results = new List<string>();
 
-        foreach (var raw in patterns)
+        foreach (var raw in entries)
         {
             if (string.IsNullOrWhiteSpace(raw)) continue;
 
-            var pattern = raw.Trim();
+            var entry = raw.Trim();
 
             // 정책 값에 공백이 들어가면 Chromium 이 항목 전체를 무시한다.
-            if (pattern.Any(char.IsWhiteSpace))
+            if (entry.Any(char.IsWhiteSpace))
             {
-                WarnPatternOnce(pattern, "공백이 들어 있어 무시했습니다");
+                WarnPatternOnce(entry, "공백이 들어 있어 무시했습니다");
                 continue;
             }
 
-            // 경로가 없으면 그 사이트 전체가 막힌다.
-            // 쇼츠만 막으려던 설정에서 이런 패턴이 보이면 거의 확실히 실수다.
-            if (!pattern.Contains('/'))
+            // "<확장ID>" 또는 "<확장ID>;<업데이트URL>" 이어야 한다.
+            var id = entry.Split(';', 2)[0];
+            if (!IsExtensionId(id))
             {
-                WarnPatternOnce(pattern,
-                    "경로(/)가 없어 해당 사이트 전체가 막힙니다. 쇼츠만 막으려면 youtube.com/shorts 처럼 경로까지 적으세요");
+                WarnPatternOnce(entry,
+                    "확장 ID 형식이 아닙니다. a~p 소문자 32글자여야 합니다 (예: abcdefghijklmnopabcdefghijklmnop)");
+                continue;
             }
 
-            if (!results.Contains(pattern, StringComparer.Ordinal)) results.Add(pattern);
+            if (!results.Contains(entry, StringComparer.Ordinal)) results.Add(entry);
         }
 
         return results;
     }
+
+    /// <summary>Chromium 확장 ID 는 a~p 소문자 32글자다.</summary>
+    private static bool IsExtensionId(string value) =>
+        value.Length == 32 && value.All(c => c is >= 'a' and <= 'p');
 
     /// <summary>이 브라우저에 대해 아직 경고하지 않았으면 true 를 돌려주고 기록한다.</summary>
     private bool WarnBrowserOnce(string browserId)
@@ -533,10 +557,10 @@ public sealed class BrowserPolicyManager : IBrowserPolicyManager
 
             var applied = new List<string>();
 
-            var urls = _registry.ReadList($@"{registryKey}\{PolicyNames.UrlBlocklist}");
-            applied.Add(urls is null or { Count: 0 }
-                ? "차단 URL 없음"
-                : $"차단 URL {urls.Count}개");
+            var forced = _registry.ReadList($@"{registryKey}\{PolicyNames.ExtensionInstallForcelist}");
+            applied.Add(forced is null or { Count: 0 }
+                ? "강제 설치 확장 없음"
+                : $"강제 설치 확장 {forced.Count}개");
 
             if (_registry.ReadValue(registryKey, PolicyNames.IncognitoModeAvailability) == PolicyValue.Dword(1))
             {

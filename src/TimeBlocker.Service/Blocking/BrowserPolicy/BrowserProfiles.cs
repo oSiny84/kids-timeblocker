@@ -80,8 +80,21 @@ public static class BrowserProfiles
 /// <summary>Chromium 계열 공통 정책 이름. 오타를 막기 위해 한 곳에 모아 둔다.</summary>
 public static class PolicyNames
 {
-    /// <summary>차단할 URL 목록. 번호 값으로 된 하위 키.</summary>
+    /// <summary>
+    /// 차단할 URL 목록. 번호 값으로 된 하위 키.
+    ///
+    /// 더 이상 여기에 무언가를 써넣지 않는다. 쇼츠 차단에 쓰려 했으나 실제 PC 에서
+    /// 통하지 않았다. (진짜 페이지 이동만 막고, 유튜브 안에서의 이동은 잡지 못한다)
+    /// 그래도 백업/복구 목록에는 남겨 둔다. 이전 버전이 써넣은 항목을 걷어내야 하기 때문이다.
+    /// </summary>
     public const string UrlBlocklist = "URLBlocklist";
+
+    /// <summary>
+    /// 강제 설치할 확장 목록. 사용자가 지우거나 끌 수 없다.
+    /// 목록에서 빼면 크롬이 알아서 제거하므로 스케줄에 맞춰 켜고 끌 수 있다.
+    /// ExtensionInstallBlocklist 보다 우선한다. (전체 차단과 함께 써도 된다)
+    /// </summary>
+    public const string ExtensionInstallForcelist = "ExtensionInstallForcelist";
 
     /// <summary>설치를 막을 확장 ID 목록. "*" 은 전체 차단.</summary>
     public const string ExtensionInstallBlocklist = "ExtensionInstallBlocklist";
@@ -102,6 +115,7 @@ public static class PolicyNames
     public static readonly string[] ListPolicies =
     {
         UrlBlocklist,
+        ExtensionInstallForcelist,
         ExtensionInstallBlocklist,
         ExtensionInstallAllowlist
     };

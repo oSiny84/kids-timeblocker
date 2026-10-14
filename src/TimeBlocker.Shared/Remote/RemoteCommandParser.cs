@@ -195,8 +195,8 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
         // Shorts 는 도메인이 아니라 URL 경로로 막는다. 도메인을 받아주면
         // 설정에는 들어가지만 아무 효과가 없어서 "넣었는데 안 막힌다" 가 된다.
         const string shortsNote =
-            "ERROR\nShorts 는 도메인으로 막지 않습니다. URL 경로로 막습니다.\n\n" +
-            "쇼츠 차단 대상을 바꾸려면 설정파일의 Shorts.BlockedUrlPatterns 를 수정하세요.\n" +
+            "ERROR\nShorts 는 도메인으로 막지 않습니다. 쇼츠를 지우는 확장을 강제 설치해서 막습니다.\n\n" +
+            "쓰는 확장을 바꾸려면 설정파일의 Shorts.ForcedExtensions 를 수정하세요.\n" +
             "도메인을 넣으면 youtube.com 전체가 막혀 일반 영상도 못 보게 됩니다.";
 
         if (args.Length == 0)

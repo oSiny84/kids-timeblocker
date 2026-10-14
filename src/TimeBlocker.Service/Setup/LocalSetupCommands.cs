@@ -178,7 +178,7 @@ public static class LocalSetupCommands
 
         Console.WriteLine("쇼츠 차단: 사용 (일반 YouTube 영상은 그대로 볼 수 있습니다)");
         Console.WriteLine($"  대상 브라우저 : {string.Join(", ", config.BrowserPolicy.Browsers)}");
-        Console.WriteLine($"  차단 URL      : {string.Join(", ", config.Shorts.BlockedUrlPatterns)}");
+        Console.WriteLine($"  강제 설치 확장: {string.Join(", ", config.Shorts.ForcedExtensions.Select(e => e.Split(';', 2)[0]))}");
 
         // PC 전체에 적용되는 변경이므로 무엇이 함께 켜지는지 분명히 알린다.
         Console.WriteLine("  함께 막습니다 :");
@@ -241,7 +241,7 @@ public static class LocalSetupCommands
             Console.WriteLine(
                 $"  {target.ToDisplayName(),-8} Mode={settings.Mode.ToCommandName(),-8} DNS={settings.UseDnsBlocking} " +
                 $"Firewall={settings.UseFirewallBlocking} Domains={settings.Domains.Count} " +
-                $"BrowserPolicy={settings.UseBrowserPolicyBlocking} Urls={settings.BlockedUrlPatterns.Count}");
+                $"BrowserPolicy={settings.UseBrowserPolicyBlocking} Extensions={settings.ForcedExtensions.Count}");
         }
 
         Console.WriteLine();
@@ -258,9 +258,9 @@ public static class LocalSetupCommands
             $"DisableGuestMode={config.BrowserPolicy.DisableGuestMode} " +
             $"DisableDnsOverHttps={config.BrowserPolicy.DisableDnsOverHttps}");
         Console.WriteLine($"  BlockExtensionInstalls={config.BrowserPolicy.BlockExtensionInstalls}");
-        foreach (var pattern in config.Shorts.BlockedUrlPatterns)
+        foreach (var entry in config.Shorts.ForcedExtensions)
         {
-            Console.WriteLine($"  blocked url: {pattern}");
+            Console.WriteLine($"  forced extension: {entry}");
         }
 
         Console.WriteLine();
