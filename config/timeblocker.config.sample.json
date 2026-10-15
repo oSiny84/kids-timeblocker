@@ -97,6 +97,32 @@
     ],
     "ExtraExecutablePaths": []
   },
+  "Shorts": {
+    "Mode": "Schedule",
+    "UseDnsBlocking": false,
+    "UseFirewallBlocking": false,
+    "TerminateProcesses": false,
+    "UseBrowserPolicyBlocking": true,
+    "ForcedExtensions": [
+      "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
+    ],
+    "Domains": [],
+    "ProcessNames": [],
+    "ExtraExecutablePaths": []
+  },
+  "BrowserPolicy": {
+    "Enabled": false,
+    "Browsers": [
+      "chrome",
+      "edge"
+    ],
+    "RegistryKeyOverrides": {},
+    "DisableIncognito": true,
+    "DisableGuestMode": true,
+    "DisableDnsOverHttps": true,
+    "BlockExtensionInstalls": false,
+    "ExtensionAllowlist": []
+  },
   "TemporaryPermit": {
     "MaxMinutes": 120,
     "MinMinutes": 1

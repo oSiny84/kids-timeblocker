@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     순서가 중요하다.
-    1. cleanup 실행 : hosts 차단 구간 / 방화벽 규칙 / 어댑터 DNS 설정 원복
+    1. cleanup 실행 : hosts 차단 구간 / 방화벽 규칙 / 브라우저 정책 / 어댑터 DNS 설정 원복
     2. 서비스 정지 및 삭제
     3. (선택) 설치 폴더와 데이터 폴더 삭제
 
@@ -84,7 +84,7 @@ else {
 
 # 2. 차단 상태 정리 (cleanup 과 동일한 공통 로직 사용)
 #    어느 단계가 실패해도 나머지는 계속 수행되고, 마지막에 요약이 출력된다.
-Write-Host "[2/5] 시스템 원상복구 (DNS / hosts / 방화벽 / 상태파일)" -ForegroundColor Yellow
+Write-Host "[2/5] 시스템 원상복구 (DNS / hosts / 방화벽 / 브라우저 정책 / 상태파일)" -ForegroundColor Yellow
 $restoreFailed = $false
 if (Test-Path $exePath) {
     & $exePath cleanup state

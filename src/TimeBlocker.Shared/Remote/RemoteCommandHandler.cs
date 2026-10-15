@@ -91,6 +91,9 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
                 RemoteCommandType.ShowMaxPermit => $"Max Permit : {_configStore.Current.TemporaryPermit.MaxMinutes} minutes",
                 RemoteCommandType.AdminList => BuildAdminList(),
                 RemoteCommandType.DnsStatus => _enforcement.DnsStatus.Format(),
+                RemoteCommandType.BrowserPolicyStatus => BuildBrowserPolicyStatus(),
+                RemoteCommandType.SetBrowserPolicy =>
+                    await HandleSetBrowserPolicyAsync(command, cancellationToken).ConfigureAwait(false),
                 RemoteCommandType.Doctor => await RunDoctorAsync(cancellationToken).ConfigureAwait(false),
                 RemoteCommandType.DnsTest =>
                     await _enforcement.RunDnsSelfTestAsync(cancellationToken).ConfigureAwait(false),
@@ -173,9 +176,15 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
 
         // 상태와 "왜 그런지"를 같은 줄에 적는다.
         // 결과만 보여주면 "스케줄이 맞는데 왜 안 막히냐" 는 혼동이 반복된다.
+        var shortsNotEnforced = false;
         foreach (var decision in _policy.EvaluateAll())
         {
-            var state = ResponseFormatter.BlockedOrAllowed(decision.IsBlocked);
+            // 판정은 BLOCKED 인데 그것을 실행할 수단이 꺼져 있을 수 있다.
+            // 그대로 BLOCKED 라고만 적으면 상태 화면이 거짓말을 한다.
+            var notEnforced = IsBlockedButNotEnforced(config, decision);
+            shortsNotEnforced |= notEnforced;
+
+            var state = notEnforced ? "BLOCKED*" : ResponseFormatter.BlockedOrAllowed(decision.IsBlocked);
             var why = decision.Reason switch
             {
                 AccessReason.AlwaysOpen => "unblock · 항상 열어둠",
@@ -186,6 +195,14 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
                 _ => "auto · 지금은 차단 시간 아님"
             };
             builder.AppendLine($"{decision.Target.ToDisplayName(),-12}: {state,-8}({why})");
+        }
+
+        if (shortsNotEnforced)
+        {
+            builder.AppendLine();
+            builder.AppendLine("* Shorts 는 BLOCKED 로 돼 있지만 실제로는 막히지 않습니다.");
+            builder.AppendLine("  쇼츠는 브라우저 정책으로만 막을 수 있는데 그 기능이 꺼져 있습니다.");
+            builder.AppendLine("  켜려면: policy on");
         }
 
         builder.AppendLine();
@@ -217,6 +234,12 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         builder.AppendLine("DNS:");
         builder.AppendLine(_enforcement.DnsStatus.Format());
 
+        // 쇼츠 차단은 브라우저 정책으로만 동작한다.
+        // 실제로 적용됐는지 확인할 방법이 여기뿐이므로 상태에 항상 보여준다.
+        builder.AppendLine();
+        builder.AppendLine("Browser Policy:");
+        builder.AppendLine(_enforcement.BrowserPolicyDescription);
+
         return builder.ToString().TrimEnd();
     }
 
@@ -229,7 +252,19 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
         foreach (var target in BlockTargets.Real)
         {
             var mode = config.GetTarget(target).Mode;
-            builder.AppendLine($"{target.ToDisplayName(),-8}: {mode.ToCommandName(),-8}{mode.ToDisplayName()}");
+            var mark = target == BlockTarget.Shorts && mode != BlockMode.Open && !IsShortsEnforceable(config)
+                ? "  * 실제로는 적용 안 됨"
+                : string.Empty;
+
+            builder.AppendLine(
+                $"{target.ToDisplayName(),-8}: {mode.ToCommandName(),-8}{mode.ToDisplayName()}{mark}");
+        }
+
+        if (config.Shorts.Mode != BlockMode.Open && !IsShortsEnforceable(config))
+        {
+            builder.AppendLine();
+            builder.AppendLine("* 쇼츠는 브라우저 정책으로만 막을 수 있는데 그 기능이 꺼져 있습니다.");
+            builder.AppendLine("  켜려면: policy on");
         }
 
         builder.AppendLine();
@@ -379,6 +414,22 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
             cancelledPermits += _permits.Cancel(one, source);
         }
 
+        // "block shorts" 처럼 Shorts 를 직접 지정해 막으라고 했으면, 그것이 곧 동의다.
+        // 쇼츠는 브라우저 정책 없이는 전혀 막히지 않으므로 함께 켜 준다.
+        // 설정파일을 직접 고치게 만들면 이 프로그램의 전제(PC 를 만지지 않는다)가 깨진다.
+        //
+        // all 로 묶어 지정한 경우는 켜지 않는다. PC 전체에 적용되는 변경을
+        // 포괄 명령의 부수효과로 일으키면 안 된다. 그 경우는 안내만 한다.
+        var turnedPolicyOn = false;
+        if (target == BlockTarget.Shorts
+            && mode != BlockMode.Open
+            && config.Shorts.UseBrowserPolicyBlocking
+            && !config.BrowserPolicy.Enabled)
+        {
+            config.BrowserPolicy.Enabled = true;
+            turnedPolicyOn = true;
+        }
+
         await SaveAndApplyAsync(config, ct).ConfigureAwait(false);
 
         var what = mode switch
@@ -403,7 +454,167 @@ public sealed class RemoteCommandHandler : IRemoteCommandHandler
                 $"{decision.Target.ToDisplayName(),-8}: {ResponseFormatter.BlockedOrAllowed(decision.IsBlocked),-8}({decision.Mode.ToCommandName()})");
         }
 
+        if (turnedPolicyOn)
+        {
+            // 레지스트리 정책을 건드리는 변경이므로 무엇이 켜졌는지 반드시 알린다.
+            builder.AppendLine();
+            builder.AppendLine("쇼츠를 막으려면 브라우저 정책이 필요해서 함께 켰습니다.");
+            builder.AppendLine();
+            builder.AppendLine(DescribeWhatTurningOnDoes(config));
+            builder.AppendLine();
+            builder.AppendLine("정책만 다시 끄려면: policy off");
+        }
+
+        // Shorts 는 브라우저 정책으로만 막힌다. 기능이 꺼져 있으면 BLOCKED 로 보이지만
+        // 실제로는 아무것도 막히지 않는다. 그 간극을 조용히 두면 안 된다.
+        var shortsWarning = DescribeShortsGap(config, applied);
+        if (shortsWarning is not null)
+        {
+            builder.AppendLine();
+            builder.AppendLine(shortsWarning);
+        }
+
         return builder.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// 쇼츠 차단이 실제로 동작할 수 있는 상태인지.
+    /// 브라우저 정책이 꺼져 있거나 대상이 그것을 쓰지 않으면 아무것도 막히지 않는다.
+    /// </summary>
+    private static bool IsShortsEnforceable(TimeBlockerConfig config) =>
+        config.BrowserPolicy.Enabled && config.Shorts.UseBrowserPolicyBlocking;
+
+    /// <summary>
+    /// 판정은 차단인데 그것을 실행할 수단이 없는 상태인지.
+    ///
+    /// 쇼츠는 브라우저 정책으로만 막힌다. 그 기능이 꺼져 있으면 판정 엔진은 BLOCKED 를
+    /// 돌려주지만 실제로는 아무것도 막히지 않는다. 상태 화면이 그 차이를 감추면
+    /// "막았는데 쇼츠가 그대로 되네" 가 된다. 실제로 그런 보고를 받았다.
+    /// </summary>
+    private static bool IsBlockedButNotEnforced(TimeBlockerConfig config, AccessDecision decision) =>
+        decision.Target == BlockTarget.Shorts && decision.IsBlocked && !IsShortsEnforceable(config);
+
+    /// <summary>
+    /// Shorts 를 막으라고 했지만 브라우저 정책이 꺼져 있어 실제로는 적용되지 않는 경우의 안내.
+    /// 해당 없으면 null.
+    ///
+    /// 대상을 직접 지정한 경우(block shorts)는 호출 전에 기능을 켜 주므로 여기 오지 않는다.
+    /// 여기에 오는 것은 block all 처럼 전체를 묶어 지정한 경우다.
+    /// </summary>
+    private static string? DescribeShortsGap(TimeBlockerConfig config, IReadOnlyCollection<BlockTarget> applied)
+    {
+        if (!applied.Contains(BlockTarget.Shorts)) return null;
+        if (config.Shorts.Mode == BlockMode.Open) return null;
+        if (IsShortsEnforceable(config)) return null;
+
+        return "※ Shorts 는 아직 실제로 막히지 않습니다.\n" +
+               "   쇼츠는 URL 경로를 봐야 해서 브라우저 정책이 필요합니다.\n" +
+               "   'policy on' 을 보내면 켜집니다. (또는 'block shorts')";
+    }
+
+    // --------------------------------------------------------- 브라우저 정책
+
+    /// <summary>`policy` - 브라우저 정책이 지금 어떤 상태인지.</summary>
+    private string BuildBrowserPolicyStatus()
+    {
+        var config = _configStore.Current;
+        var policy = config.BrowserPolicy;
+        var builder = new StringBuilder();
+
+        builder.AppendLine($"Browser Policy : {(policy.Enabled ? "ON" : "OFF")}");
+        builder.AppendLine(_enforcement.BrowserPolicyDescription);
+        builder.AppendLine();
+
+        builder.AppendLine("쇼츠 차단은 이 기능으로만 동작합니다.");
+        builder.AppendLine($"Shorts 상태    : {config.Shorts.Mode.ToCommandName()} ({config.Shorts.Mode.ToDisplayName()})");
+
+        if (config.Shorts.ForcedExtensions.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("강제 설치 확장 (아이가 지울 수 없습니다):");
+            foreach (var entry in config.Shorts.ForcedExtensions)
+            {
+                // "<ID>;<업데이트URL>" 에서 ID 만 보여준다. URL 까지 적으면 줄이 길어진다.
+                builder.AppendLine($"  {entry.Split(';', 2)[0]}");
+            }
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("함께 막는 우회 경로:");
+        builder.AppendLine($"  시크릿 모드  : {OnOff(policy.DisableIncognito)}");
+        builder.AppendLine($"  게스트 모드  : {OnOff(policy.DisableGuestMode)}");
+        builder.AppendLine($"  브라우저 DoH : {OnOff(policy.DisableDnsOverHttps)}");
+        builder.AppendLine($"  확장 설치    : {OnOff(policy.BlockExtensionInstalls)}");
+
+        builder.AppendLine();
+        builder.Append(policy.Enabled ? "끄려면: policy off" : "켜려면: policy on");
+
+        return builder.ToString();
+
+        static string OnOff(bool blocked) => blocked ? "차단" : "허용";
+    }
+
+    /// <summary>
+    /// `policy on` / `policy off`.
+    ///
+    /// 끄면 바꿔놓은 레지스트리 정책을 원래 값으로 되돌린다. (다음 평가 주기에 수행)
+    /// 설정파일을 직접 고치지 않고도 되돌릴 수 있어야 하므로 반드시 원격으로 제공한다.
+    /// </summary>
+    private async Task<string> HandleSetBrowserPolicyAsync(RemoteCommand command, CancellationToken ct)
+    {
+        var enable = command.Enable!.Value;
+        var config = _configStore.Current;
+
+        if (config.BrowserPolicy.Enabled == enable)
+        {
+            return $"이미 {(enable ? "켜져" : "꺼져")} 있습니다.\n\n{BuildBrowserPolicyStatus()}";
+        }
+
+        config.BrowserPolicy.Enabled = enable;
+        await SaveAndApplyAsync(config, ct).ConfigureAwait(false);
+
+        var builder = new StringBuilder();
+        builder.AppendLine("OK");
+
+        if (enable)
+        {
+            builder.AppendLine("브라우저 정책을 켰습니다.");
+            builder.AppendLine();
+            builder.AppendLine(DescribeWhatTurningOnDoes(config));
+        }
+        else
+        {
+            builder.AppendLine("브라우저 정책을 껐습니다.");
+            builder.AppendLine("바꿔놓은 레지스트리 정책을 원래 값으로 되돌렸습니다.");
+            builder.AppendLine("쇼츠 차단과 시크릿/DoH 차단이 모두 해제됩니다.");
+        }
+
+        builder.AppendLine();
+        builder.Append(_enforcement.BrowserPolicyDescription);
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// 기능을 켤 때 함께 적용되는 것을 분명히 알려준다.
+    /// PC 전체에 적용되는 변경이므로 조용히 넘어가면 안 된다.
+    /// </summary>
+    private static string DescribeWhatTurningOnDoes(TimeBlockerConfig config)
+    {
+        var policy = config.BrowserPolicy;
+        var builder = new StringBuilder();
+
+        builder.AppendLine("이 PC 의 브라우저에 아래가 함께 적용됩니다.");
+        builder.AppendLine("  - 쇼츠를 지우는 확장 강제 설치 (아이가 지울 수 없음)");
+        if (policy.DisableIncognito) builder.AppendLine("  - 시크릿 모드 사용 불가");
+        if (policy.DisableGuestMode) builder.AppendLine("  - 게스트 모드 사용 불가");
+        if (policy.DisableDnsOverHttps) builder.AppendLine("  - 브라우저 DoH 끔 (DNS 차단 우회 방지)");
+        if (policy.BlockExtensionInstalls) builder.AppendLine("  - 확장 프로그램 설치 차단");
+
+        builder.AppendLine();
+        builder.Append($"대상 브라우저: {string.Join(", ", policy.Browsers)}");
+
+        return builder.ToString();
     }
 
     private async Task<string> HandleDomainAsync(RemoteCommand command, CancellationToken ct)

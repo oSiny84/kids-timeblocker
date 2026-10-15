@@ -22,6 +22,7 @@ echo  서비스를 제거하고 PC 를 원래 상태로 되돌립니다.
 echo    - 어댑터 DNS 복원
 echo    - hosts 차단 구간 제거
 echo    - 방화벽 규칙 제거
+echo    - 브라우저 정책 원복 (쇼츠 차단 등)
 echo.
 set "REMOVEDATA="
 set /p REMOVEDATA=" 설정과 로그까지 모두 지울까요? (Y/N, 기본 N): "
