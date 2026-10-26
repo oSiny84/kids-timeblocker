@@ -20,6 +20,11 @@ public class RemoteCommandParserTests
     [InlineData("shorts 15", BlockTarget.Shorts, 15)]
     [InlineData("sh 15", BlockTarget.Shorts, 15)]
     [InlineData("쇼츠 15", BlockTarget.Shorts, 15)]
+    [InlineData("suddenattack 60", BlockTarget.SuddenAttack, 60)]
+    [InlineData("sa 60", BlockTarget.SuddenAttack, 60)]
+    [InlineData("sudden 60", BlockTarget.SuddenAttack, 60)]
+    [InlineData("서든 30", BlockTarget.SuddenAttack, 30)]
+    [InlineData("서든어택 30", BlockTarget.SuddenAttack, 30)]
     [InlineData("  YouTube   45  ", BlockTarget.YouTube, 45)]
     public void ParsesPermitCommands(string input, BlockTarget expectedTarget, int expectedMinutes)
     {
@@ -109,6 +114,9 @@ public class RemoteCommandParserTests
     [InlineData("block shorts", BlockMode.Blocked, BlockTarget.Shorts)]
     [InlineData("unblock sh", BlockMode.Open, BlockTarget.Shorts)]
     [InlineData("auto shorts", BlockMode.Schedule, BlockTarget.Shorts)]
+    [InlineData("block suddenattack", BlockMode.Blocked, BlockTarget.SuddenAttack)]
+    [InlineData("unblock sa", BlockMode.Open, BlockTarget.SuddenAttack)]
+    [InlineData("auto 서든", BlockMode.Schedule, BlockTarget.SuddenAttack)]
     public void SetMode_ParsesEveryState(string input, BlockMode expectedMode, BlockTarget expectedTarget)
     {
         // 상태는 셋 중 하나로만 정해진다. 어떤 명령을 쳐도 애매하게 남지 않는다.
@@ -384,6 +392,23 @@ public class RemoteCommandParserTests
 
         Assert.Equal(RemoteCommandType.Unknown, command.Type);
         Assert.Contains("ForcedExtensions", command.Error);
+    }
+
+    [Fact]
+    public void Domain_AcceptsSuddenAttack()
+    {
+        // 서든어택은 Roblox 처럼 도메인 차단도 쓴다. Shorts 처럼 거부하면 안 된다.
+        var command = _sut.Parse("domains sa");
+
+        Assert.Equal(RemoteCommandType.ShowDomains, command.Type);
+        Assert.Equal(BlockTarget.SuddenAttack, command.Target);
+    }
+
+    [Fact]
+    public void Status_ShortcutIsNotSuddenAttack()
+    {
+        // "s" 는 status 의 줄임말이다. 서든어택 줄임말(sa)과 겹치지 않아야 한다.
+        Assert.Equal(RemoteCommandType.Status, _sut.Parse("s").Type);
     }
 
     [Fact]

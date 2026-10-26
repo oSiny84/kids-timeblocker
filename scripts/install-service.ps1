@@ -186,7 +186,7 @@ sc.exe create $ServiceName binPath= "`"$exePath`"" start= auto obj= "LocalSystem
     DisplayName= "TimeBlocker Access Control Service" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "서비스 등록 실패" }
 
-sc.exe description $ServiceName "시간대별로 YouTube / Roblox 접근을 차단합니다. Telegram 으로 원격 관리됩니다." | Out-Null
+sc.exe description $ServiceName "시간대별로 YouTube / Roblox / 서든어택 접근을 차단합니다. Telegram 으로 원격 관리됩니다." | Out-Null
 
 # 서비스 복구(Recovery) 설정.
 #   First failure      : Restart the Service (10초 후)

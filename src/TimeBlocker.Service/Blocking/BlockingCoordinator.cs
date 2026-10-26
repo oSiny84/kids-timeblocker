@@ -25,7 +25,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
     private readonly INetworkAdapterDnsConfigurator _adapters;
     private readonly IDnsCacheFlusher _dnsCache;
     private readonly IDnsSelfTest _selfTest;
-    private readonly RobloxLocator _locator;
+    private readonly GameExecutableLocator _locator;
     private readonly ProcessEnforcer _processEnforcer;
     private readonly IBrowserPolicyManager _browserPolicy;
 
@@ -72,7 +72,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         INetworkAdapterDnsConfigurator adapters,
         IDnsCacheFlusher dnsCache,
         IDnsSelfTest selfTest,
-        RobloxLocator locator,
+        GameExecutableLocator locator,
         ProcessEnforcer processEnforcer,
         IBrowserPolicyManager browserPolicy,
         ILogger<BlockingCoordinator> logger)
@@ -205,7 +205,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
             var settings = config.GetTarget(decision.Target);
             if (!settings.UseFirewallBlocking) continue;
 
-            var ruleName = GetRuleName(decision.Target);
+            var ruleName = FirewallManager.RuleNameFor(decision.Target);
             if (!decision.IsBlocked)
             {
                 executablesToBlock[ruleName] = new List<string>();
@@ -775,13 +775,6 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         }
     }
 
-    private static string GetRuleName(BlockTarget target) => target switch
-    {
-        BlockTarget.Roblox => FirewallManager.RobloxRuleName,
-        BlockTarget.YouTube => FirewallManager.YouTubeRuleName,
-        _ => $"TimeBlocker_{target}_Block"
-    };
-
     /// <summary>
     /// 방화벽 차단 대상인데 실행파일을 못 찾았다. 매 주기 찍으면 로그가 넘치므로
     /// 처음 한 번과 이후 30분에 한 번만 남긴다.
@@ -804,6 +797,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
         _logger.LogWarning(
             "{Target} 차단 시간이지만 실행파일({Names})을 찾지 못해 방화벽 규칙을 만들지 못했습니다. " +
             "도메인 차단만 적용됩니다. 이미 실행 중인 프로그램은 막히지 않을 수 있습니다. " +
+            "실행 중인 프로세스가 보이면 그 경로를 기억해서 규칙을 만듭니다. " +
             "Microsoft Store 판 등 다른 위치에 설치했다면 ExtraExecutablePaths 에 전체 경로를 적어주세요.",
             target.ToDisplayName(),
             string.Join(", ", settings.ProcessNames));
@@ -845,7 +839,7 @@ public sealed class BlockingCoordinator : IEnforcementController, IAsyncDisposab
             else parts.Add("Hosts");
         }
 
-        if (config.YouTube.UseFirewallBlocking || config.Roblox.UseFirewallBlocking)
+        if (BlockTargets.Real.Any(t => config.GetTarget(t).UseFirewallBlocking))
         {
             parts.Add("Firewall");
         }

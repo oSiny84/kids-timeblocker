@@ -35,7 +35,7 @@ public sealed class DoctorService : IDiagnosticsService
     private readonly IHostsFileManager _hosts;
     private readonly IFirewallManager _firewall;
     private readonly INetworkAdapterDnsConfigurator _adapters;
-    private readonly RobloxLocator _locator;
+    private readonly GameExecutableLocator _locator;
     private readonly IRegistryPolicyEditor _registry;
     private readonly ILogger _logger;
 
@@ -46,7 +46,7 @@ public sealed class DoctorService : IDiagnosticsService
         IHostsFileManager hosts,
         IFirewallManager firewall,
         INetworkAdapterDnsConfigurator adapters,
-        RobloxLocator locator,
+        GameExecutableLocator locator,
         IRegistryPolicyEditor registry,
         ILogger logger,
         INotificationHub? notifierHub = null)
@@ -103,7 +103,10 @@ public sealed class DoctorService : IDiagnosticsService
         report.Add(CheckHostsFallback(ipv4Alive, config));
         report.Add(CheckHostsRegionSanity());
         report.Add(await CheckFirewallAsync(config, ct).ConfigureAwait(false));
-        report.Add(CheckRoblox(config));
+        foreach (var target in FirewallTargets(config))
+        {
+            report.Add(CheckGameExecutable(config, target));
+        }
         report.Add(CheckBrowserPolicy(config));
         report.Add(CheckNotifierApp());
 
@@ -682,16 +685,23 @@ public sealed class DoctorService : IDiagnosticsService
     {
         const string name = "Firewall rules";
 
-        if (!config.Roblox.UseFirewallBlocking && !config.YouTube.UseFirewallBlocking)
+        var targets = FirewallTargets(config);
+        if (targets.Count == 0)
         {
             return DoctorCheck.Pass(name, "사용 안 함");
         }
 
         try
         {
-            var exists = await _firewall.ExistsAsync(FirewallManager.RobloxRuleName, ct).ConfigureAwait(false);
-            return exists
-                ? DoctorCheck.Pass(name, FirewallManager.RobloxRuleName)
+            var existing = new List<string>();
+            foreach (var target in targets)
+            {
+                var ruleName = FirewallManager.RuleNameFor(target);
+                if (await _firewall.ExistsAsync(ruleName, ct).ConfigureAwait(false)) existing.Add(ruleName);
+            }
+
+            return existing.Count > 0
+                ? DoctorCheck.Pass(name, string.Join(", ", existing))
                 : DoctorCheck.Pass(name, "규칙 없음 (현재 차단 시간대가 아님)");
         }
         catch (Exception ex)
@@ -701,18 +711,30 @@ public sealed class DoctorService : IDiagnosticsService
         }
     }
 
-    private DoctorCheck CheckRoblox(TimeBlockerConfig config)
+    /// <summary>방화벽으로 막는 대상. 실행파일 경로가 있어야 규칙을 만들 수 있다.</summary>
+    private static List<BlockTarget> FirewallTargets(TimeBlockerConfig config) =>
+        BlockTargets.Real
+            .Where(t => config.GetTarget(t).UseFirewallBlocking && config.GetTarget(t).ProcessNames.Count > 0)
+            .ToList();
+
+    private DoctorCheck CheckGameExecutable(TimeBlockerConfig config, BlockTarget target)
     {
-        const string name = "Roblox executable";
+        // smoke-test.ps1 이 "Roblox executable" 이라는 이름을 읽으므로 이 형식을 유지한다.
+        var name = $"{target.ToDisplayName()} executable";
+        var settings = config.GetTarget(target);
 
         try
         {
-            var found = _locator.Locate(config.Roblox.ProcessNames);
+            var found = _locator.Locate(settings.ProcessNames).ToList();
+            found.AddRange(settings.ExtraExecutablePaths.Where(File.Exists));
+            var count = found.Distinct(StringComparer.OrdinalIgnoreCase).Count();
 
-            return found.Count > 0
-                ? DoctorCheck.Pass(name, $"{found.Count}개 발견")
+            return count > 0
+                ? DoctorCheck.Pass(name, $"{count}개 발견")
                 : DoctorCheck.Warn(name, "설치되어 있지 않음",
-                    "Roblox 를 설치하면 자동으로 탐지됩니다. 방화벽 차단만 해당되며 DNS 차단은 그대로 동작합니다.");
+                    "설치하면 자동으로 탐지됩니다. 기본 위치가 아닌 폴더에 설치했어도 " +
+                    "차단 시간에 한 번 실행되면 경로를 기억합니다. 방화벽 차단만 해당되며 DNS 차단과 " +
+                    "게임 종료는 그대로 동작합니다.");
         }
         catch (Exception ex)
         {

@@ -307,7 +307,7 @@ public static class LocalSetupCommands
             new HostsFileManager(NullLogger<HostsFileManager>.Instance),
             new FirewallManager(NullLogger<FirewallManager>.Instance),
             CreateAdapterConfigurator(),
-            new Blocking.RobloxLocator(NullLogger<Blocking.RobloxLocator>.Instance),
+            new Blocking.GameExecutableLocator(NullLogger<Blocking.GameExecutableLocator>.Instance),
             new RegistryPolicyEditor(NullLogger<RegistryPolicyEditor>.Instance),
             logger);
 

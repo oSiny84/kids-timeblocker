@@ -124,7 +124,7 @@ public static class ResponseFormatter
         unblock youtube   계속 열어둔다 (스케줄 무시)
         auto youtube      스케줄대로 (기본값)
 
-        대상은 youtube / roblox / shorts / all.
+        대상은 youtube / roblox / suddenattack / shorts / all.
         대상을 빼면 전체에 적용된다. (block = block all)
 
         shorts 는 쇼츠만 막는다. 일반 YouTube 영상은 그대로 볼 수 있다.
@@ -133,6 +133,7 @@ public static class ResponseFormatter
         [Temporary Allow] 지금만 잠깐 열어주기
         youtube <min>   (yt)
         roblox <min>    (rb)
+        suddenattack <min>  (sa, 서든)
         shorts <min>    (sh)
         all <min>
 

@@ -2,11 +2,11 @@ namespace TimeBlocker.Shared.Models;
 
 /// <summary>
 /// 차단 대상. All 은 "모든 대상"을 의미하는 논리 값이며
-/// 실제 차단은 YouTube / Roblox / Shorts 에 대해 수행한다.
+/// 실제 차단은 YouTube / Roblox / Shorts / SuddenAttack 에 대해 수행한다.
 ///
 /// 대상마다 쓰는 수단이 다르다.
-///   YouTube / Roblox - DNS(도메인) + 방화벽 + 프로세스 종료
-///   Shorts           - 브라우저 정책(URL 경로). DNS 로는 경로를 구분할 수 없다.
+///   YouTube / Roblox / SuddenAttack - DNS(도메인) + 방화벽 + 프로세스 종료
+///   Shorts                          - 브라우저 정책(URL 경로). DNS 로는 경로를 구분할 수 없다.
 /// </summary>
 public enum BlockTarget
 {
@@ -16,6 +16,9 @@ public enum BlockTarget
     /// <summary>YouTube Shorts 만. 일반 YouTube 영상은 건드리지 않는다.</summary>
     Shorts = 2,
 
+    /// <summary>서든어택 (넥슨). 설치 폴더를 사용자가 고를 수 있어서 실행 중인 프로세스로도 경로를 찾는다.</summary>
+    SuddenAttack = 3,
+
     All = 100
 }
 
@@ -23,10 +26,10 @@ public static class BlockTargets
 {
     /// <summary>
     /// 실제로 차단/허용을 적용하는 대상 목록.
-    /// 상태 표시 순서를 겸하므로 YouTube 바로 뒤에 Shorts 를 둔다.
+    /// 상태 표시 순서를 겸하므로 YouTube 바로 뒤에 Shorts 를 두고, 게임은 그 뒤에 둔다.
     /// </summary>
     public static readonly BlockTarget[] Real =
-        { BlockTarget.YouTube, BlockTarget.Shorts, BlockTarget.Roblox };
+        { BlockTarget.YouTube, BlockTarget.Shorts, BlockTarget.Roblox, BlockTarget.SuddenAttack };
 
     public static bool TryParse(string? text, out BlockTarget target)
     {
@@ -49,6 +52,13 @@ public static class BlockTargets
             case "쇼츠":
                 target = BlockTarget.Shorts;
                 return true;
+            case "suddenattack":
+            case "sudden":
+            case "sa":
+            case "서든":
+            case "서든어택":
+                target = BlockTarget.SuddenAttack;
+                return true;
             case "all":
             case "전체":
                 target = BlockTarget.All;
@@ -63,6 +73,8 @@ public static class BlockTargets
         BlockTarget.YouTube => "YouTube",
         BlockTarget.Roblox => "Roblox",
         BlockTarget.Shorts => "Shorts",
+        // 소문자로 바꾸면 그대로 명령어(auto suddenattack)가 되도록 띄어 쓰지 않는다.
+        BlockTarget.SuddenAttack => "SuddenAttack",
         BlockTarget.All => "ALL",
         _ => target.ToString()
     };

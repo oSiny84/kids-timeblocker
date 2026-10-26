@@ -2,7 +2,7 @@
 
 [한국어](README.md) | [English](README.en.md)
 
-Windows 10 / 11 에서 **시간대별로 YouTube / Roblox 접근을 차단**하는 프로그램입니다.
+Windows 10 / 11 에서 **시간대별로 YouTube / Roblox / 서든어택 접근을 차단**하는 프로그램입니다.
 
 관리자는 **Telegram 채팅창을 원격 콘솔처럼 사용해서** 상태를 확인하고, 차단 시간을 바꾸고,
 필요할 때 일시 허용을 줄 수 있습니다. 차단 대상 PC 에는 설정 GUI 가 없습니다.
@@ -59,7 +59,8 @@ status
 
 ### 5) 자주 쓰는 명령
 
-이것만 알아도 웬만한 건 다 됩니다. 대상은 `youtube` / `roblox` / `shorts` / `all` 로 바꿔서 씁니다.
+이것만 알아도 웬만한 건 다 됩니다. 대상은 `youtube` / `roblox` / `suddenattack` / `shorts` / `all` 로 바꿔서 씁니다.
+서든어택은 `sa` 나 `서든` 으로 짧게 써도 됩니다. (`block sa`, `서든 30`)
 
 | 명령 | 뜻 |
 |---|---|
@@ -104,7 +105,7 @@ status
       └─────────────────┘
                │
                ▼
-     YouTube / Roblox / Shorts
+  YouTube / Roblox / 서든어택 / Shorts
             접근 제어
 ```
 
@@ -126,7 +127,7 @@ TimeBlocker.sln
 │
 ├─ src/TimeBlocker.Service         Windows Service (핵심)
 │  ├─ Worker/                      EnforcementWorker(차단 루프), RemoteProviderWorker
-│  ├─ Blocking/                    HostsFileManager, FirewallManager, RobloxLocator,
+│  ├─ Blocking/                    HostsFileManager, FirewallManager, GameExecutableLocator,
 │  │  └─ Dns/                      DnsProxyServer, DnsMessage, DnsSelfTest,
 │  │                                NetworkAdapterDnsConfigurator, AdapterDnsStateStore
 │  ├─ Remote/                      IRemoteCommandProvider, TelegramRemoteCommandProvider
@@ -430,6 +431,7 @@ Current Time:
 YouTube     : BLOCKED (block · 항상 막음)
 Shorts      : BLOCKED (auto · 지금은 차단 시간)
 Roblox      : BLOCKED (auto · 지금은 차단 시간)
+SuddenAttack: BLOCKED (auto · 지금은 차단 시간)
 
 Schedule:
 Mon-Thu 21:00 ~ 07:00
@@ -496,6 +498,7 @@ $env:TIMEBLOCKER_DATA = "D:\temp\tbdata"
 ```
 youtube 30      (yt 30)     YouTube 를 지금부터 30분 허용
 roblox 60       (rb 60)     Roblox 를 60분 허용
+sa 60           (서든 60)   서든어택을 60분 허용 (suddenattack 60 도 됨)
 all 20                      전체를 20분 허용
 ```
 
@@ -535,7 +538,7 @@ schedule default 21:00 07:00     전체 요일 기본값
 | 잠금 | `block youtube` | 스케줄과 무관하게 계속 막힘 |
 | 열림 | `unblock youtube` | 스케줄과 무관하게 계속 열림 |
 
-대상은 `youtube` / `roblox` / `shorts` / `all` 입니다. 대상을 생략하면 전체에 적용됩니다
+대상은 `youtube` / `roblox` / `suddenattack` / `shorts` / `all` 입니다. 대상을 생략하면 전체에 적용됩니다
 (`block` = `block all`).
 
 `shorts` 는 **쇼츠만** 막습니다. 일반 YouTube 영상은 그대로 볼 수 있습니다.
@@ -548,6 +551,7 @@ schedule default 21:00 07:00     전체 요일 기본값
 YouTube : block   잠금 (항상 막음)
 Shorts  : auto    자동 (스케줄대로)
 Roblox  : auto    자동 (스케줄대로)
+SuddenAttack: auto    자동 (스케줄대로)
 ```
 
 `status` 는 결과와 이유를 같이 보여줍니다.
@@ -556,6 +560,7 @@ Roblox  : auto    자동 (스케줄대로)
 YouTube     : BLOCKED (block · 항상 막음)
 Shorts      : BLOCKED (auto · 지금은 차단 시간)
 Roblox      : ALLOW   (auto · 지금은 차단 시간 아님)
+SuddenAttack: ALLOW   (auto · 지금은 차단 시간 아님)
 ```
 
 **상태를 바꾸면 그 대상의 일시 허용도 함께 취소됩니다.** 일시 허용은 스케줄을
@@ -727,7 +732,7 @@ doctor
 점검 항목: 관리자 권한 · 서비스 설치/실행 · 53 포트 사용 가능 여부 ·
 DNS 프록시 IPv4/IPv6 리스너 · 활성 어댑터 · 어댑터 DNS · 원본 DNS 백업 ·
 어댑터가 프록시를 가리키는지 · 정상 도메인 해석 · 차단 도메인 차단 여부 ·
-hosts 폴백 상태 · hosts 관리 구간 이상 여부 · 방화벽 규칙 · Roblox 실행파일 ·
+hosts 폴백 상태 · hosts 관리 구간 이상 여부 · 방화벽 규칙 · 게임 실행파일(Roblox / 서든어택) ·
 Telegram 설정/관리자 ID/API 통신 · 설정파일 검증 · 상태파일 읽기·쓰기 ·
 데이터 디렉터리 ACL · 로그 디렉터리 쓰기
 
@@ -749,8 +754,9 @@ TimeBlocker Doctor
 [PASS] Normal DNS resolution : example.com -> 93.184.216.34
 [PASS] Blocked domain : googlevideo.com blocked
 [PASS] Hosts fallback : INACTIVE (프록시 사용 중)
-[PASS] Firewall rules : TimeBlocker_Roblox_Block
+[PASS] Firewall rules : TimeBlocker_SuddenAttack_Block
 [WARN] Roblox executable : 설치되어 있지 않음
+[PASS] SuddenAttack executable : 1개 발견
 [PASS] Telegram API : @MyTimeBlockerBot
 [PASS] Data directory ACL : SYSTEM/Administrators 만 쓰기
 
@@ -1089,6 +1095,22 @@ youtubei.googleapis.com
     설정파일의 `ExtraExecutablePaths` 에 전체 경로를 적어주세요.
 - 프로세스 종료 (아래 참고)
 
+### 서든어택 — DNS + 방화벽
+
+Roblox 와 같은 방식입니다. 업데이트하면 **따로 켜지 않아도** 다른 대상과 같은 스케줄로 막힙니다.
+
+- DNS 차단: `sa.nexon.com` (서든어택 홈페이지에서 게임 시작하는 길)
+  - `nexon.com` 전체는 막지 않습니다. 다른 넥슨 게임과 넥슨 로그인까지 같이 막히기 때문입니다.
+- Windows 방화벽 아웃바운드 차단
+  - 규칙 이름: `TimeBlocker_SuddenAttack_Block`
+  - 대상 실행파일: `SuddenAttack.exe`
+  - 실행파일 자동 탐색: 고정 드라이브마다 `\Nexon`, `\Games\Nexon`, `\Program Files\Nexon`,
+    `\Program Files (x86)\Nexon` (기본 설치 위치는 `C:\Nexon\SuddenAttack`)
+  - **넥슨 런처는 설치 폴더를 고를 수 있습니다.** 위 위치에 없으면, 차단 시간에 게임이 실행될 때
+    **실행 중인 프로세스에서 경로를 읽어** 규칙을 만듭니다. 한 번 본 경로는 서비스가 도는 동안 기억하므로
+    게임을 껐다 다시 켜도 접속이 막힙니다. (서비스가 다시 시작되면 다음 실행 때 다시 알아냅니다)
+- 프로세스 종료 (아래 참고). 넥슨 런처는 다른 게임과 같이 쓰므로 종료하지 않습니다.
+
 ### 실행 중인 게임 종료
 
 DNS 와 방화벽만으로는 **이미 실행 중인 게임**을 막지 못하는 경우가 있습니다.
@@ -1106,7 +1128,7 @@ Roblox 클라이언트는 한 번 접속하면 게임 서버 IP 로 직접 통�
 - 유예 중에 허용(`roblox 30`)하거나 `unblock` 하면 **예약이 취소**됩니다.
   다시 차단되면 유예 시간이 처음부터 다시 주어집니다.
 - 아이가 스스로 껐으면 예약이 취소됩니다.
-- 기본값은 **Roblox 만** 켜져 있습니다. YouTube 는 브라우저를 통째로 종료해야 해서
+- 기본값은 **Roblox 와 서든어택만** 켜져 있습니다. YouTube 는 브라우저를 통째로 종료해야 해서
   꺼져 있습니다. (`TerminateProcesses`)
 - 유예 시간은 `Enforcement.TerminationGraceMinutes` 로 조절합니다. `0` 이면 즉시 종료합니다.
 
@@ -1144,7 +1166,7 @@ Windows 정식 API 만 사용합니다. 프로세스를 숨기거나 보안 기�
 
 | 대상 | 차단 수단 |
 |---|---|
-| YouTube / Roblox | DNS(도메인) + 방화벽 + 프로세스 종료 |
+| YouTube / Roblox / 서든어택 | DNS(도메인) + 방화벽 + 프로세스 종료 |
 | Shorts | 브라우저 정책으로 **쇼츠 제거 확장을 강제 설치** |
 
 강제 설치한 확장은 **아이가 지우거나 끌 수 없습니다.** 차단이 풀리면 목록에서 빠지면서
@@ -1377,6 +1399,16 @@ Firefox 는 Chromium 계열이 아니어서 이 방식이 전혀 통하지 않�
       // 형식: "<확장ID>;<업데이트URL>"
       "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
     ]
+  },
+  "SuddenAttack": {
+    // 서든어택. 이 구간이 없는 예전 설정파일은 아래 기본값으로 채워진다.
+    "Mode": "Schedule",                   // block sa / auto sa / unblock sa
+    "UseDnsBlocking": true,
+    "UseFirewallBlocking": true,
+    "TerminateProcesses": true,
+    "Domains": [ "sa.nexon.com" ],        // nexon.com 전체는 막지 않는다 (다른 넥슨 게임까지 막힘)
+    "ProcessNames": [ "SuddenAttack.exe" ],
+    "ExtraExecutablePaths": []            // 자동으로 못 찾을 때만. 예: "D:\\Games\\SA\\SuddenAttack.exe"
   },
   "BrowserPolicy": {
     // 기본 꺼짐. 레지스트리 정책을 건드리므로 명시적으로 켜야 한다.
@@ -1775,6 +1807,9 @@ Telegram 과 완전히 같은 명령 처리기를 사용하므로 동작이 동�
 - DNS 프록시는 **UDP 질의만** 처리합니다. TCP DNS 질의는 프록시를 거치지 않습니다.
 - 방화벽은 **아웃바운드만** 차단합니다. 이미 실행 중인 Roblox 프로세스의 기존 연결은
   다음 연결 시도부터 막힙니다.
+- **서든어택은 실제 PC 에서 확인하지 않았습니다.** 프로세스 이름(`SuddenAttack.exe`)과 기본 설치 위치는
+  넥슨 고객센터 안내를 따랐습니다. 차단 시간에 게임이 꺼지지 않으면 작업 관리자 → 세부 정보 탭에서
+  실제 프로세스 이름을 확인해 `SuddenAttack.ProcessNames` 에 넣어주세요.
 
 **동작 관련**
 

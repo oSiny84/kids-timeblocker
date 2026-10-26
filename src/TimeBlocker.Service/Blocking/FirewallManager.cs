@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TimeBlocker.Shared.Models;
 
 namespace TimeBlocker.Service.Blocking;
 
@@ -25,6 +26,19 @@ public sealed class FirewallManager : IFirewallManager
 {
     public const string RobloxRuleName = "TimeBlocker_Roblox_Block";
     public const string YouTubeRuleName = "TimeBlocker_YouTube_Block";
+    public const string SuddenAttackRuleName = "TimeBlocker_SuddenAttack_Block";
+
+    /// <summary>이 프로그램이 만드는 규칙 전체. 정리(cleanup)와 진단이 같은 목록을 쓴다.</summary>
+    public static readonly string[] AllRuleNames = { RobloxRuleName, YouTubeRuleName, SuddenAttackRuleName };
+
+    /// <summary>대상별 규칙 이름. 차단과 진단이 같은 이름을 봐야 한다.</summary>
+    public static string RuleNameFor(BlockTarget target) => target switch
+    {
+        BlockTarget.Roblox => RobloxRuleName,
+        BlockTarget.YouTube => YouTubeRuleName,
+        BlockTarget.SuddenAttack => SuddenAttackRuleName,
+        _ => $"TimeBlocker_{target}_Block"
+    };
 
     private readonly ILogger<FirewallManager> _logger;
 

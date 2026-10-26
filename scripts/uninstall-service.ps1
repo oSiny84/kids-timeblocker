@@ -97,6 +97,7 @@ else {
     Write-Host "  실행파일을 찾을 수 없어 수동으로 정리합니다." -ForegroundColor DarkYellow
     netsh advfirewall firewall delete rule name="TimeBlocker_Roblox_Block"  2>&1 | Out-Null
     netsh advfirewall firewall delete rule name="TimeBlocker_YouTube_Block" 2>&1 | Out-Null
+    netsh advfirewall firewall delete rule name="TimeBlocker_SuddenAttack_Block" 2>&1 | Out-Null
     Write-Host "  hosts 파일의 # TIMEBLOCKER BEGIN ~ END 구간은 직접 확인하세요." -ForegroundColor DarkYellow
     Write-Host "  어댑터 DNS 가 127.0.0.1 로 남아 인터넷이 되지 않으면," -ForegroundColor DarkYellow
     Write-Host "  네트워크 설정에서 DNS 를 '자동으로 DNS 서버 주소 받기'로 바꾸세요." -ForegroundColor DarkYellow

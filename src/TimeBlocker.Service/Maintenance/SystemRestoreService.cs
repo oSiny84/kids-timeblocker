@@ -165,7 +165,7 @@ public sealed class SystemRestoreService : ISystemRestoreService
         try
         {
             // 우리가 만든 규칙 이름만 지운다. 사용자의 다른 규칙은 건드리지 않는다.
-            var ruleNames = new[] { FirewallManager.RobloxRuleName, FirewallManager.YouTubeRuleName };
+            var ruleNames = FirewallManager.AllRuleNames;
 
             var removed = 0;
             foreach (var ruleName in ruleNames)
@@ -183,7 +183,7 @@ public sealed class SystemRestoreService : ISystemRestoreService
             if (remaining.Count > 0)
             {
                 return RestoreStep.Failed(name, $"규칙이 남아 있음 ({string.Join(", ", remaining)})",
-                    "관리자 권한으로 실행: netsh advfirewall firewall delete rule name=\"TimeBlocker_Roblox_Block\"");
+                    $"관리자 권한으로 실행: netsh advfirewall firewall delete rule name=\"{remaining[0]}\"");
             }
 
             return removed > 0 ? RestoreStep.Ok(name, $"OK ({removed}개 제거)") : RestoreStep.Skipped(name, "규칙 없음");

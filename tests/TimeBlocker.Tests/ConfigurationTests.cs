@@ -172,6 +172,52 @@ public class ConfigurationTests : IDisposable
     }
 
     [Fact]
+    public void SuddenAttack_IsAddedToExistingInstalls()
+    {
+        // 1.3 이하에서 올라온 설정에는 SuddenAttack 구간이 없다.
+        // 올리기만 하면 Roblox 와 같은 방식으로 차단 시간에 막혀야 한다. (설정파일을 고치게 만들지 않는다)
+        File.WriteAllText(ConfigPath, """
+                                      {
+                                        "YouTube": { "Mode": "Blocked", "Domains": ["youtube.com"] },
+                                        "Roblox":  { "Mode": "Schedule", "Domains": ["roblox.com"] }
+                                      }
+                                      """);
+
+        var config = new JsonConfigurationStore(ConfigPath).Current;
+
+        Assert.Equal(BlockMode.Schedule, config.SuddenAttack.Mode);
+        Assert.True(config.SuddenAttack.UseDnsBlocking);
+        Assert.True(config.SuddenAttack.UseFirewallBlocking);
+        Assert.True(config.SuddenAttack.TerminateProcesses);
+        Assert.Contains("SuddenAttack.exe", config.SuddenAttack.ProcessNames);
+        Assert.Contains("sa.nexon.com", config.SuddenAttack.Domains);
+
+        // 기존 대상의 상태는 그대로다.
+        Assert.Equal(BlockMode.Blocked, config.YouTube.Mode);
+    }
+
+    [Fact]
+    public void SuddenAttack_DoesNotBlockAllOfNexon()
+    {
+        // nexon.com 을 막으면 다른 넥슨 게임과 로그인까지 막힌다. 서든어택 홈페이지만 막는다.
+        var config = TimeBlockerConfig.CreateDefault();
+
+        Assert.DoesNotContain("nexon.com", config.SuddenAttack.Domains);
+        Assert.All(config.SuddenAttack.Domains, d => Assert.EndsWith(".nexon.com", d));
+    }
+
+    [Fact]
+    public void ExplicitNullSuddenAttack_IsFilledByNormalize()
+    {
+        File.WriteAllText(ConfigPath, """{ "SuddenAttack": null }""");
+
+        var store = new JsonConfigurationStore(ConfigPath);
+
+        Assert.NotNull(store.Current.SuddenAttack);
+        Assert.Contains("SuddenAttack.exe", store.Current.SuddenAttack.ProcessNames);
+    }
+
+    [Fact]
     public void GetTarget_ThrowsForAll()
     {
         var config = TimeBlockerConfig.CreateDefault();
