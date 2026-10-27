@@ -145,7 +145,7 @@ public static class Program
             new BrowserPolicyStateStore(sp.GetRequiredService<ILogger<BrowserPolicyStateStore>>()));
         services.AddSingleton<IBrowserPolicyManager, BrowserPolicyManager>();
 
-        services.AddSingleton<RobloxLocator>();
+        services.AddSingleton<GameExecutableLocator>();
         services.AddSingleton<IUserSessionNotifier, UserSessionNotifier>();
         services.AddSingleton<IRunningProcessTracker, RunningProcessTracker>();
         services.AddSingleton<ProcessEnforcer>();
@@ -164,7 +164,7 @@ public static class Program
             sp.GetRequiredService<IHostsFileManager>(),
             sp.GetRequiredService<IFirewallManager>(),
             sp.GetRequiredService<INetworkAdapterDnsConfigurator>(),
-            sp.GetRequiredService<RobloxLocator>(),
+            sp.GetRequiredService<GameExecutableLocator>(),
             sp.GetRequiredService<IRegistryPolicyEditor>(),
             sp.GetRequiredService<ILogger<DoctorService>>(),
             sp.GetRequiredService<INotificationHub>()));

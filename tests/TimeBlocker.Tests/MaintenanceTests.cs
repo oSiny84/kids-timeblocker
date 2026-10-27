@@ -279,6 +279,34 @@ public class SystemRestoreServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RemovesEveryTargetsFirewallRule()
+    {
+        // 대상이 늘면 정리할 규칙도 같이 늘어야 한다. 빠지면 제거 후에도 게임이 막힌 채로 남는다.
+        _firewall.Seed(FirewallManager.AllRuleNames);
+
+        var report = await RunAsync();
+
+        Assert.Contains(FirewallManager.SuddenAttackRuleName, FirewallManager.AllRuleNames);
+        foreach (var rule in FirewallManager.AllRuleNames)
+        {
+            Assert.False(await _firewall.ExistsAsync(rule, CancellationToken.None), rule);
+        }
+        Assert.True(report.Steps.Single(s => s.Name == "Firewall cleanup").Success);
+    }
+
+    [Fact]
+    public void EveryFirewallTarget_HasItsRuleInTheCleanupList()
+    {
+        // 방화벽을 쓰는 대상의 규칙 이름은 모두 cleanup 목록에 있어야 한다.
+        var config = TimeBlockerConfig.CreateDefault();
+
+        foreach (var target in BlockTargets.Real.Where(t => config.GetTarget(t).UseFirewallBlocking))
+        {
+            Assert.Contains(FirewallManager.RuleNameFor(target), FirewallManager.AllRuleNames);
+        }
+    }
+
+    [Fact]
     public async Task RemovesPermitStateFile()
     {
         var permitPath = Path.Combine(_directory, "state", "permits.json");

@@ -110,6 +110,19 @@
     "ProcessNames": [],
     "ExtraExecutablePaths": []
   },
+  "SuddenAttack": {
+    "Mode": "Schedule",
+    "Domains": [
+      "sa.nexon.com"
+    ],
+    "UseDnsBlocking": true,
+    "UseFirewallBlocking": true,
+    "TerminateProcesses": true,
+    "ProcessNames": [
+      "SuddenAttack.exe"
+    ],
+    "ExtraExecutablePaths": []
+  },
   "BrowserPolicy": {
     "Enabled": false,
     "Browsers": [

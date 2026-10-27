@@ -157,6 +157,25 @@ public sealed class TargetSettings
             "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
         }
     };
+
+    /// <summary>
+    /// SuddenAttack(서든어택) 대상의 기본값. Roblox 와 같은 방식으로 막는다.
+    ///
+    /// 게임은 접속한 뒤 서버 IP 로 직접 통신하므로 도메인 차단만으로는 부족하다.
+    /// 홈페이지(sa.nexon.com)는 DNS 로, 게임 자체는 방화벽 + 프로세스 종료로 막는다.
+    ///
+    /// nexon.com 전체는 막지 않는다. 다른 넥슨 게임과 로그인까지 같이 막혀 버린다.
+    /// 넥슨 런처(넥슨 플러그)도 다른 게임과 같이 쓰므로 종료 대상에 넣지 않는다.
+    /// </summary>
+    public static TargetSettings CreateSuddenAttackDefault() => new()
+    {
+        Mode = BlockMode.Schedule,
+        UseDnsBlocking = true,
+        UseFirewallBlocking = true,
+        TerminateProcesses = true,
+        Domains = new List<string> { "sa.nexon.com" },
+        ProcessNames = new List<string> { "SuddenAttack.exe" }
+    };
 }
 
 /// <summary>
@@ -294,6 +313,11 @@ public sealed class TimeBlockerConfig
     /// </summary>
     public TargetSettings Shorts { get; set; } = TargetSettings.CreateShortsDefault();
 
+    /// <summary>
+    /// 서든어택. 1.3 이하 설정파일에는 이 구간이 없으므로 기본값(스케줄대로 차단)이 채워진다.
+    /// </summary>
+    public TargetSettings SuddenAttack { get; set; } = TargetSettings.CreateSuddenAttackDefault();
+
     public BrowserPolicySettings BrowserPolicy { get; set; } = new();
 
     public TemporaryPermitSettings TemporaryPermit { get; set; } = new();
@@ -311,6 +335,7 @@ public sealed class TimeBlockerConfig
         BlockTarget.YouTube => YouTube,
         BlockTarget.Roblox => Roblox,
         BlockTarget.Shorts => Shorts,
+        BlockTarget.SuddenAttack => SuddenAttack,
         _ => throw new ArgumentOutOfRangeException(nameof(target), target, "실제 대상만 조회할 수 있습니다.")
     };
 
@@ -360,7 +385,8 @@ public sealed class TimeBlockerConfig
                     "RobloxPlayerLauncher.exe"
                 }
             },
-            Shorts = TargetSettings.CreateShortsDefault()
+            Shorts = TargetSettings.CreateShortsDefault(),
+            SuddenAttack = TargetSettings.CreateSuddenAttackDefault()
         };
     }
 
@@ -403,13 +429,21 @@ public sealed class TimeBlockerConfig
         Shorts.ExtraExecutablePaths ??= new List<string>();
         Shorts.ForcedExtensions ??= new List<string>();
 
+        // SuddenAttack 구간이 없는 설정파일(1.3 이하)은 기본값을 채운다. Shorts 와 같은 규칙이다.
+        SuddenAttack ??= TargetSettings.CreateSuddenAttackDefault();
+        SuddenAttack.Domains ??= new List<string>();
+        SuddenAttack.ProcessNames ??= new List<string>();
+        SuddenAttack.ExtraExecutablePaths ??= new List<string>();
+
         YouTube.ForcedExtensions ??= new List<string>();
         Roblox.ForcedExtensions ??= new List<string>();
+        SuddenAttack.ForcedExtensions ??= new List<string>();
 
         // 1.1 이하에서 올라온 설정파일의 Enabled 를 Mode 로 옮긴다.
         YouTube.MigrateLegacyMode();
         Roblox.MigrateLegacyMode();
         Shorts.MigrateLegacyMode();
+        SuddenAttack.MigrateLegacyMode();
 
         BrowserPolicy ??= new BrowserPolicySettings();
         BrowserPolicy.Browsers ??= new List<string>();

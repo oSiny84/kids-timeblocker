@@ -125,7 +125,7 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
     {
         const string usage =
             "Usage:\nblock youtube      계속 막기\nunblock youtube    계속 열기\nauto youtube       스케줄대로\n\n" +
-            "대상: youtube / roblox / shorts / all";
+            "대상: youtube / roblox / suddenattack / shorts / all";
 
         // 대상을 안 적으면 전체로 본다. 응답에 무엇이 바뀌었는지 그대로 적는다.
         if (args.Length == 0)
@@ -190,7 +190,7 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
     {
         const string usage =
             "Usage:\ndomains youtube\ndomain add youtube music.youtube.com\ndomain remove youtube music.youtube.com\n\n" +
-            "대상: youtube / roblox";
+            "대상: youtube / roblox / suddenattack";
 
         // Shorts 는 도메인이 아니라 URL 경로로 막는다. 도메인을 받아주면
         // 설정에는 들어가지만 아무 효과가 없어서 "넣었는데 안 막힌다" 가 된다.
@@ -580,6 +580,9 @@ public sealed class RemoteCommandParser : IRemoteCommandParser
                 return true;
             case "shorts" or "short" or "sh" or "쇼츠":
                 target = BlockTarget.Shorts;
+                return true;
+            case "suddenattack" or "sudden" or "sa" or "서든" or "서든어택":
+                target = BlockTarget.SuddenAttack;
                 return true;
             case "all" or "everything":
                 target = BlockTarget.All;

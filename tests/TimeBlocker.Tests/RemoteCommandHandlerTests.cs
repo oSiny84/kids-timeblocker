@@ -81,6 +81,36 @@ public class RemoteCommandHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Status_ShowsSuddenAttackBlockedDuringSchedule()
+    {
+        // 서든어택은 따로 켜지 않아도 Roblox 와 같은 스케줄로 막힌다.
+        var response = await RunAsync("status");
+
+        Assert.Contains("SuddenAttack: BLOCKED", response);
+    }
+
+    [Fact]
+    public async Task SuddenAttackPermit_OpensOnlySuddenAttack()
+    {
+        var response = await RunAsync("서든 30");
+        Assert.StartsWith("OK", response);
+
+        var status = await RunAsync("status");
+        Assert.Contains("SuddenAttack: ALLOW", status);
+        Assert.Contains("Roblox      : BLOCKED", status);
+    }
+
+    [Fact]
+    public async Task UnblockSuddenAttack_IsSavedAndLeavesRobloxAlone()
+    {
+        var response = await RunAsync("unblock sa");
+
+        Assert.StartsWith("OK", response);
+        Assert.Equal(BlockMode.Open, _configStore.Current.SuddenAttack.Mode);
+        Assert.Equal(BlockMode.Schedule, _configStore.Current.Roblox.Mode);
+    }
+
+    [Fact]
     public async Task Status_ShowsDnsProxyState()
     {
         var response = await RunAsync("status");

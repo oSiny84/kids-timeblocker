@@ -2,7 +2,7 @@
 
 [한국어](README.md) | [English](README.en.md)
 
-A Windows 10 / 11 program that **blocks access to YouTube / Roblox on a weekly schedule**.
+A Windows 10 / 11 program that **blocks access to YouTube / Roblox / Sudden Attack on a weekly schedule**.
 
 The administrator uses **a Telegram chat as a remote console** — checking status, changing the
 blocking schedule, and granting temporary allowances when needed. There is no settings GUI on
@@ -28,7 +28,7 @@ the blocked PC itself.
       └─────────────────┘
                │
                ▼
-        YouTube / Roblox
+  YouTube / Roblox / Sudden Attack
           access control
 ```
 
@@ -91,7 +91,8 @@ to fix it.
 
 ### 5) Commands you'll use most
 
-This is really all you need for day-to-day use. Swap the target for `youtube` / `roblox` / `shorts` / `all`.
+This is really all you need for day-to-day use. Swap the target for `youtube` / `roblox` / `suddenattack` / `shorts` / `all`.
+Sudden Attack also accepts the short forms `sa` and `서든` (`block sa`, `sa 30`).
 
 | Command | What it does |
 |---|---|
@@ -129,7 +130,7 @@ TimeBlocker.sln
 │
 ├─ src/TimeBlocker.Service         Windows Service (the core)
 │  ├─ Worker/                      EnforcementWorker (enforcement loop), RemoteProviderWorker
-│  ├─ Blocking/                    HostsFileManager, FirewallManager, RobloxLocator,
+│  ├─ Blocking/                    HostsFileManager, FirewallManager, GameExecutableLocator,
 │  │  └─ Dns/                      DnsProxyServer, DnsMessage, DnsSelfTest,
 │  │                                NetworkAdapterDnsConfigurator, AdapterDnsStateStore
 │  ├─ Remote/                      IRemoteCommandProvider, TelegramRemoteCommandProvider
@@ -443,6 +444,7 @@ Current Time:
 YouTube     : BLOCKED (block · always blocked)
 Shorts      : BLOCKED (auto · currently in the blocking window)
 Roblox      : BLOCKED (auto · currently in the blocking window)
+SuddenAttack: BLOCKED (auto · currently in the blocking window)
 
 Schedule:
 Mon-Thu 21:00 ~ 07:00
@@ -507,6 +509,7 @@ The leading slash (`/`) is optional. Commands are case-insensitive.
 ```
 youtube 30      (yt 30)     Allow YouTube for 30 minutes starting now
 roblox 60       (rb 60)     Allow Roblox for 60 minutes
+sa 60           (서든 60)   Allow Sudden Attack for 60 minutes (suddenattack 60 works too)
 all 20                      Allow everything for 20 minutes
 ```
 
@@ -546,7 +549,7 @@ Each target is always in **exactly one of three states**.
 | Locked | `block youtube` | Always blocked, regardless of the schedule |
 | Open | `unblock youtube` | Always open, regardless of the schedule |
 
-The target is `youtube` / `roblox` / `shorts` / `all`. Omitting the target applies to everything
+The target is `youtube` / `roblox` / `suddenattack` / `shorts` / `all`. Omitting the target applies to everything
 (`block` = `block all`).
 
 `shorts` blocks **only Shorts**. Regular YouTube videos still play. It uses a completely
@@ -559,6 +562,7 @@ Checking with `targets` looks like this:
 YouTube : block   Locked (always blocked)
 Shorts  : auto    Automatic (follows the schedule)
 Roblox  : auto    Automatic (follows the schedule)
+SuddenAttack: auto    Automatic (follows the schedule)
 ```
 
 `status` shows the result and the reason together:
@@ -567,6 +571,7 @@ Roblox  : auto    Automatic (follows the schedule)
 YouTube     : BLOCKED (block · always blocked)
 Shorts      : BLOCKED (auto · currently in the blocking window)
 Roblox      : ALLOW   (auto · not currently in the blocking window)
+SuddenAttack: ALLOW   (auto · not currently in the blocking window)
 ```
 
 **Changing the state also cancels that target's temporary permit.** A temporary permit is an
@@ -715,7 +720,7 @@ by observing the system from the outside.
 Checks include: administrator rights · service installed/running · port 53 availability ·
 DNS proxy IPv4/IPv6 listeners · active adapters · adapter DNS · original-DNS backup · whether
 adapters point at the proxy · normal domain resolution · blocked domain actually blocked ·
-hosts fallback state · hosts managed-region integrity · firewall rules · Roblox executable ·
+hosts fallback state · hosts managed-region integrity · firewall rules · game executables (Roblox / Sudden Attack) ·
 Telegram config/admin ID/API connectivity · config file validation · state file read/write ·
 data directory ACL · log directory writable · notifier tray app connection
 
@@ -737,8 +742,9 @@ TimeBlocker Doctor
 [PASS] Normal DNS resolution : example.com -> 93.184.216.34
 [PASS] Blocked domain : googlevideo.com blocked
 [PASS] Hosts fallback : INACTIVE (proxy in use)
-[PASS] Firewall rules : TimeBlocker_Roblox_Block
+[PASS] Firewall rules : TimeBlocker_SuddenAttack_Block
 [WARN] Roblox executable : not installed
+[PASS] SuddenAttack executable : 1 found
 [PASS] Telegram API : @MyTimeBlockerBot
 [PASS] Data directory ACL : writable only by SYSTEM/Administrators
 
@@ -1089,6 +1095,27 @@ commands.
     Store edition — add the full path under `ExtraExecutablePaths` in the config.
 - Process termination (see below)
 
+### Sudden Attack — DNS + firewall
+
+Same approach as Roblox. After updating, it is blocked on the same schedule as the other
+targets **without turning anything on.**
+
+- DNS blocking: `sa.nexon.com` (the website you can launch the game from)
+  - All of `nexon.com` is deliberately not blocked — that would also block other Nexon games
+    and the Nexon login.
+- Windows Firewall outbound blocking
+  - Rule name: `TimeBlocker_SuddenAttack_Block`
+  - Executable: `SuddenAttack.exe`
+  - Auto-discovery: on every fixed drive, `\Nexon`, `\Games\Nexon`, `\Program Files\Nexon`,
+    `\Program Files (x86)\Nexon` (the default install location is `C:\Nexon\SuddenAttack`)
+  - **The Nexon launcher lets you pick the install folder.** If the game isn't in one of the
+    locations above, the service **reads the path from the running process** when the game is
+    started during a blocking window, and builds the rule from it. The path is remembered for as
+    long as the service runs, so closing and relaunching the game doesn't get around it. (After
+    a service restart, it's picked up again the next time the game runs.)
+- Process termination (see below). The Nexon launcher is shared with other games, so it is not
+  terminated.
+
 ### Terminating a running game
 
 DNS and firewall alone sometimes can't stop **a game that's already running.** Once a Roblox
@@ -1108,7 +1135,7 @@ terminated.
   scheduled termination.** If it's blocked again later, the grace period starts over from
   scratch.
 - If the child closes it themselves, the scheduled termination is also cancelled.
-- Only **Roblox** is enabled by default. YouTube would require closing the whole browser, so it's
+- Only **Roblox and Sudden Attack** are enabled by default. YouTube would require closing the whole browser, so it's
   off by default. (`TerminateProcesses`)
 - The grace period is adjustable via `Enforcement.TerminationGraceMinutes`. `0` terminates
   immediately.
@@ -1149,7 +1176,7 @@ So the `shorts` target takes a different route.
 
 | Target | Blocking mechanism |
 |---|---|
-| YouTube / Roblox | DNS (domains) + firewall + process termination |
+| YouTube / Roblox / Sudden Attack | DNS (domains) + firewall + process termination |
 | Shorts | Browser policy that **force-installs a Shorts-removing extension** |
 
 A force-installed extension **cannot be removed or disabled by the child.** When blocking lifts,
@@ -1380,6 +1407,16 @@ Location: `%ProgramData%\TimeBlocker\timeblocker.config.json`
       // Format: "<extension id>;<update url>"
       "mgngbgbhliflggkamjnpdmegbkidiapm;https://clients2.google.com/service/update2/crx"
     ]
+  },
+  "SuddenAttack": {
+    // Sudden Attack. Older config files without this section get these defaults.
+    "Mode": "Schedule",                   // block sa / auto sa / unblock sa
+    "UseDnsBlocking": true,
+    "UseFirewallBlocking": true,
+    "TerminateProcesses": true,
+    "Domains": [ "sa.nexon.com" ],        // not all of nexon.com (that would block other Nexon games)
+    "ProcessNames": [ "SuddenAttack.exe" ],
+    "ExtraExecutablePaths": []            // only if auto-discovery fails, e.g. "D:\\Games\\SA\\SuddenAttack.exe"
   },
   "BrowserPolicy": {
     // Off by default. It touches registry policy, so it must be enabled explicitly.
@@ -1801,6 +1838,10 @@ It uses exactly the same command processor as Telegram, so behavior is identical
 - The DNS proxy only handles **UDP queries.** TCP DNS queries don't go through the proxy.
 - The firewall blocks **outbound only.** An already-running Roblox process's existing connection
   is blocked starting from its next connection attempt.
+- **Sudden Attack has not been verified on a real PC.** The process name (`SuddenAttack.exe`) and
+  default install location come from Nexon's support pages. If the game isn't closed during a
+  blocking window, check the actual process name in Task Manager → Details and put it in
+  `SuddenAttack.ProcessNames`.
 
 **Operational behavior**
 

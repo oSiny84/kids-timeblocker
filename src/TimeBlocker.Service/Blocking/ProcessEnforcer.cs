@@ -106,9 +106,11 @@ public sealed class ProcessEnforcer
                 pending = new PendingTermination { DeadlineUtc = nowUtc + grace };
                 _pending[target] = pending;
 
+                // 어떤 프로세스 때문에 경고가 떴는지 남긴다. "게임을 켜지도 않았는데 경고가 뜬다" 를 추적할 수 있어야 한다.
                 _logger.LogWarning(
-                    "{Target} 이(가) 차단 시간에 실행 중입니다. {Minutes}분 뒤 종료 예정입니다. (프로세스 {Count}개)",
-                    target.ToDisplayName(), grace.TotalMinutes, running.Count);
+                    "{Target} 이(가) 차단 시간에 실행 중입니다. {Minutes}분 뒤 종료 예정입니다. (프로세스: {Processes})",
+                    target.ToDisplayName(), grace.TotalMinutes,
+                    string.Join(", ", running.Select(p => $"{p.Name} PID {p.Id}")));
 
                 WarnFirst(target, pending.DeadlineUtc, grace);
                 return;

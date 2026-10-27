@@ -206,6 +206,7 @@ TimeBlocker $Version 설치 안내
  잠깐만 열어주기 - 시간이 지나면 원래대로 돌아갑니다
  youtube 30          YouTube 30분 허용
  roblox 60           Roblox 60분 허용
+ sa 60               서든어택 60분 허용 (suddenattack / 서든 도 됨)
  shorts 30           쇼츠만 30분 허용
 
  policy              쇼츠 차단 기능 상태 (policy on / policy off 로 켜고 끄기)

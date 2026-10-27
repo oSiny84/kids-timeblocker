@@ -188,6 +188,23 @@ public class ProcessEnforcerTests
     }
 
     [Fact]
+    public void SuddenAttack_IsTerminatedByDefault()
+    {
+        // 서든어택도 Roblox 처럼 기본 설정만으로 차단 시간에 종료돼야 한다.
+        Assert.True(_config.SuddenAttack.TerminateProcesses);
+        Assert.Contains("SuddenAttack.exe", _config.SuddenAttack.ProcessNames);
+
+        _processes.Running.Add(new RunningProcess(4321, "SuddenAttack"));
+        Evaluate(Blocked(BlockTarget.SuddenAttack));
+
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        Evaluate(Blocked(BlockTarget.SuddenAttack));
+
+        Assert.Equal(4321, Assert.Single(_processes.Killed).Id);
+        Assert.Contains(_notifier.Messages, m => m.Contains("SuddenAttack"));
+    }
+
+    [Fact]
     public void TerminationNotice_IsShownAfterKilling()
     {
         RobloxIsRunning();
