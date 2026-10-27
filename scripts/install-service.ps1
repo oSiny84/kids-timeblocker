@@ -142,6 +142,11 @@ if (Test-Path $InstallDirectory) {
 New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
 Copy-Item -Path (Join-Path $SourceDirectory '*') -Destination $InstallDirectory -Recurse -Force
 
+# 인터넷에서 받은 zip 을 탐색기로 풀면 파일마다 "인터넷에서 받음" 표시(Zone.Identifier)가 붙고,
+# 복사해도 그대로 따라온다. 그러면 로그인할 때 트레이 앱이 뜰 때마다
+# "게시자를 확인하지 못했습니다" 경고가 나온다. 설치 폴더의 파일에서 표시를 지운다.
+Get-ChildItem -LiteralPath $InstallDirectory -Recurse -File | Unblock-File
+
 # 버전 표시(텔레그램 version)는 TimeBlocker.Shared.dll 에서 읽는다.
 # 이 파일이 새 것으로 바뀌지 않았으면 명령어까지 구버전으로 동작하므로 여기서 멈춘다.
 foreach ($file in 'TimeBlocker.Service.exe', 'TimeBlocker.Shared.dll') {
