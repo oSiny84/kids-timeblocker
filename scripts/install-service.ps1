@@ -91,6 +91,21 @@ Write-Host "[2/7] 파일 복사 -> $InstallDirectory" -ForegroundColor Yellow
 #
 # 설정/로그/상태는 %ProgramData%\TimeBlocker 에 있으므로 여기서 지워도 보존된다.
 if (Test-Path $InstallDirectory) {
+    # 트레이 앱은 사용자 세션에서 돌면서 설치 폴더의 exe / TimeBlocker.Shared.dll 을 잠근다.
+    # 닫지 않으면 그 파일들이 구버전으로 남아 "설치했는데 버전이 그대로" 가 된다.
+    # 설치 끝에 다시 띄우므로 여기서 닫아도 된다. (uninstall-service.ps1 과 같은 처리)
+    $runningNotifier = Get-Process -Name 'TimeBlocker.Notifier' -ErrorAction SilentlyContinue
+    if ($runningNotifier) {
+        try {
+            $runningNotifier | Stop-Process -Force -ErrorAction Stop
+            Start-Sleep -Seconds 1
+            Write-Host "  실행 중이던 트레이 앱 종료 ($($runningNotifier.Count)개)" -ForegroundColor DarkGray
+        }
+        catch {
+            Write-Host "  트레이 앱을 닫지 못했습니다: $($_.Exception.Message)" -ForegroundColor DarkYellow
+        }
+    }
+
     # 이전 설치가 잘못된 권한을 남겼을 수 있으므로 먼저 정상 상태로 되돌린다.
     # (권한이 깨져 있으면 삭제도 복사도 "액세스가 거부되었습니다" 로 실패한다)
     # takeown 의 /D 옵션은 OS 표시 언어에 따라 답변 글자가 달라지므로 쓰지 않는다.
@@ -126,6 +141,18 @@ if (Test-Path $InstallDirectory) {
 
 New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
 Copy-Item -Path (Join-Path $SourceDirectory '*') -Destination $InstallDirectory -Recurse -Force
+
+# 버전 표시(텔레그램 version)는 TimeBlocker.Shared.dll 에서 읽는다.
+# 이 파일이 새 것으로 바뀌지 않았으면 명령어까지 구버전으로 동작하므로 여기서 멈춘다.
+foreach ($file in 'TimeBlocker.Service.exe', 'TimeBlocker.Shared.dll') {
+    $want = (Get-Item (Join-Path $SourceDirectory $file)).VersionInfo.FileVersion
+    $have = (Get-Item (Join-Path $InstallDirectory $file)).VersionInfo.FileVersion
+    if ($want -ne $have) {
+        throw "$file 이(가) 새 버전으로 바뀌지 않았습니다. (설치됨 $have / 새 버전 $want)`n" +
+              "  트레이 앱이나 TimeBlocker.Admin.exe 가 실행 중이면 닫고, 그래도 안 되면 재부팅 후 다시 설치하세요."
+    }
+}
+Write-Host "  설치된 버전: $((Get-Item $exePath).VersionInfo.ProductVersion)" -ForegroundColor DarkGray
 
 # 3. 설치 폴더 권한: SYSTEM/Administrators 만 쓰기, 일반 사용자는 읽기만
 Write-Host "[3/7] 설치 폴더 권한 설정" -ForegroundColor Yellow
